@@ -3,9 +3,9 @@ import {
   ShieldAlert,
   Building2,
   Skull,
-  Zap,
   CheckCircle2,
 } from 'lucide-react';
+import { HoldToAcceptButton } from '../ui/HoldToAcceptButton';
 import type { Contract, ThreatLevel } from '../../types/contract';
 
 interface ContractCardProps {
@@ -120,7 +120,7 @@ export function ContractCard({ contract, onAccept, isAccepting = false }: Contra
           </div>
         </div>
 
-        {/* Rodapé: Recompensa em Eddies + Ação */}
+        {/* Rodapé: Recompensa em Eddies + Botão HoldToAccept */}
         <div className="pt-2 border-t border-dark-border flex items-end justify-between gap-4">
           <div>
             <span className="block font-mono text-[10px] text-gray-400 uppercase tracking-widest">
@@ -135,19 +135,11 @@ export function ContractCard({ contract, onAccept, isAccepting = false }: Contra
           </div>
 
           {onAccept && contract.status === 'AVAILABLE' && (
-            <button
-              type="button"
+            <HoldToAcceptButton
+              onAccept={() => onAccept(contract.id)}
+              isPsycho={isPsycho}
               disabled={isAccepting}
-              onClick={() => onAccept(contract.id)}
-              className={`px-4 py-2.5 font-mono text-xs font-bold uppercase tracking-widest border transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
-                isPsycho
-                  ? 'bg-neon-pink/15 border-neon-pink text-neon-pink hover:bg-neon-pink hover:text-dark-bg'
-                  : 'bg-edgerunner-yellow/10 border-edgerunner-yellow text-edgerunner-yellow hover:bg-edgerunner-yellow hover:text-dark-bg'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5" />
-              <span>{isAccepting ? 'LINKING...' : 'ACCEPT GIG'}</span>
-            </button>
+            />
           )}
 
           {contract.status !== 'AVAILABLE' && (

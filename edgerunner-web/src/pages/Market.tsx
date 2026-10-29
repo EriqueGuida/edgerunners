@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Radar,
   RefreshCw,
@@ -270,19 +270,31 @@ export function Market() {
         </div>
       ) : (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.25 }}
+          layout
           className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
         >
-          {filteredContracts.map((contract) => (
-            <ContractCard
-              key={contract.id}
-              contract={contract}
-              onAccept={handleAcceptContract}
-              isAccepting={acceptingId === contract.id}
-            />
-          ))}
+          <AnimatePresence mode="popLayout">
+            {filteredContracts.map((contract) => (
+              <motion.div
+                key={contract.id}
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{
+                  opacity: 0,
+                  scale: 0.9,
+                  filter: 'brightness(2)',
+                  transition: { duration: 0.25 },
+                }}
+              >
+                <ContractCard
+                  contract={contract}
+                  onAccept={handleAcceptContract}
+                  isAccepting={acceptingId === contract.id}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </motion.div>
       )}
 
