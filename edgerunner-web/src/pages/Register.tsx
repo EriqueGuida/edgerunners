@@ -69,7 +69,10 @@ export function Register() {
                 <UserPlus className="w-5 h-5 text-neon-cyan drop-shadow-neon-cyan" />
               </div>
               <div>
-                <h1 className="font-display font-bold text-2xl tracking-wider text-white uppercase">
+                <h1
+                  data-text="NEW HUNTER"
+                  className="cyber-glitch font-display font-bold text-2xl tracking-wider text-white uppercase"
+                >
                   NEW <span className="text-neon-cyan">HUNTER</span>
                 </h1>
                 <p className="font-mono text-[10px] tracking-[0.25em] text-edgerunner-yellow uppercase">

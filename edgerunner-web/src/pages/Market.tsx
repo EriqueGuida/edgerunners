@@ -183,7 +183,10 @@ export function Market() {
               <Radar className="w-4 h-4 animate-spin" style={{ animationDuration: '6s' }} />
               <span>// NIGHT CITY FIXER NETWORK — LIVE BOUNTY FEED</span>
             </div>
-            <h1 className="font-display font-bold text-3xl md:text-4xl tracking-wider uppercase text-white">
+            <h1
+              data-text="CONTRACT MARKET"
+              className="cyber-glitch font-display font-bold text-3xl md:text-4xl tracking-wider uppercase text-white"
+            >
               Contract <span className="text-edgerunner-yellow drop-shadow-neon-yellow">Market</span>
             </h1>
           </div>

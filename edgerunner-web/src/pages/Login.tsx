@@ -67,7 +67,10 @@ export function Login() {
                 <Terminal className="w-5 h-5 text-edgerunner-yellow drop-shadow-neon-yellow" />
               </div>
               <div>
-                <h1 className="font-display font-bold text-2xl tracking-wider text-white uppercase">
+                <h1
+                  data-text="EDGERUNNER"
+                  className="cyber-glitch font-display font-bold text-2xl tracking-wider text-white uppercase"
+                >
                   EDGE<span className="text-edgerunner-yellow">RUNNER</span>
                 </h1>
                 <p className="font-mono text-[10px] tracking-[0.25em] text-neon-cyan uppercase">

@@ -329,7 +329,10 @@ export function MyContracts() {
               <Terminal className="w-3.5 h-3.5" />
               // PERSONAL MERCENARY LOG
             </span>
-            <h1 className="font-display font-bold text-3xl tracking-wider uppercase text-white mt-1">
+            <h1
+              data-text="MY CONTRACTS"
+              className="cyber-glitch font-display font-bold text-3xl tracking-wider uppercase text-white mt-1"
+            >
               My <span className="text-neon-cyan drop-shadow-neon-cyan">Contracts</span>
             </h1>
           </div>
