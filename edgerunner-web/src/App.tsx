@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MainLayout } from './components/layout/MainLayout';
+import { ProtectedRoute } from './components/layout/ProtectedRoute';
+import { Login } from './pages/Login';
+import { Register } from './pages/Register';
 
 function MarketPlaceholder() {
   return (
@@ -51,11 +54,20 @@ export function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<MainLayout />}>
-          <Route path="/" element={<Navigate to="/market" replace />} />
-          <Route path="/market" element={<MarketPlaceholder />} />
-          <Route path="/my-contracts" element={<MyContractsPlaceholder />} />
+        {/* Rotas Públicas de Autenticação */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+
+        {/* Rotas Privadas Protegidas por JWT */}
+        <Route element={<ProtectedRoute />}>
+          <Route element={<MainLayout />}>
+            <Route path="/" element={<Navigate to="/market" replace />} />
+            <Route path="/market" element={<MarketPlaceholder />} />
+            <Route path="/my-contracts" element={<MyContractsPlaceholder />} />
+          </Route>
         </Route>
+
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/market" replace />} />
       </Routes>
     </BrowserRouter>
