@@ -9,6 +9,8 @@ import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
 import { Market } from './pages/Market';
 import { MyContracts } from './pages/MyContracts';
+import { Profile } from './pages/Profile';
+import { Admin } from './pages/Admin';
 
 export function App() {
   return (
@@ -25,10 +27,22 @@ export function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<MainLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/contracts" element={<Market key="catalog-grid" defaultView="GRID" />} />
-                <Route path="/market" element={<Market key="market-grid" defaultView="GRID" />} />
-                <Route path="/map" element={<Market key="catalog-map" defaultView="MAP" />} />
+                <Route
+                  path="/contracts"
+                  element={<Market key="catalog-grid" defaultView="GRID" />}
+                />
+                <Route
+                  path="/market"
+                  element={<Market key="market-grid" defaultView="GRID" />}
+                />
+                <Route
+                  path="/map"
+                  element={<Market key="catalog-map" defaultView="MAP" />}
+                />
+                <Route path="/operations" element={<MyContracts />} />
                 <Route path="/my-contracts" element={<MyContracts />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/admin" element={<Admin />} />
               </Route>
             </Route>
 

@@ -1,9 +1,18 @@
 import api from './api';
-import type { Contract, NotificationItem, ThreatLevel } from '../types/contract';
+import type {
+  Contract,
+  ContractStatus,
+  NotificationItem,
+  ReputationEvent,
+  ThreatLevel,
+  WalletTransaction,
+} from '../types/contract';
 
 export const LOCAL_CONTRACTS_CACHE_KEY = 'afterhours_contracts_catalog_v2';
 export const DEMO_MY_CONTRACTS_KEY = 'afterhours_demo_my_contracts';
 export const LOCAL_NOTIFICATIONS_KEY = 'afterhours_local_notifications_v1';
+export const LOCAL_WALLET_TX_KEY = 'afterhours_local_wallet_tx_v1';
+export const LOCAL_REP_EVENTS_KEY = 'afterhours_local_rep_events_v1';
 
 export const INITIAL_GEOLOCATED_CONTRACTS: Contract[] = [
   {
@@ -500,4 +509,147 @@ export function createLocalContract(payload: {
   );
 
   return created;
+}
+
+const INITIAL_WALLET_TRANSACTIONS: WalletTransaction[] = [
+  {
+    id: 702,
+    contractId: 203,
+    contractTitle: 'Auditoria Forçada em Laboratório Subterrâneo de Seul',
+    amount: 50000,
+    balanceAfter: 74500,
+    type: 'CONTRACT_SETTLEMENT',
+    description:
+      'Liquidação criptográfica verificada da operação CTR-0203 (Songdo IBD, Seul).',
+    createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: 701,
+    amount: 24500,
+    balanceAfter: 24500,
+    type: 'INITIAL_GRANT',
+    description:
+      'Alocação inicial de credencial verificada na malha operacional AFTERHOURS NET-04.',
+    createdAt: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
+  },
+];
+
+const INITIAL_REPUTATION_EVENTS: ReputationEvent[] = [
+  {
+    id: 802,
+    delta: 20,
+    reputationAfter: 35,
+    reason:
+      'Conclusão sem detecção do contrato CTR-0203 (Auditoria Forçada em Laboratório Subterrâneo de Seul).',
+    createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: 801,
+    delta: 15,
+    reputationAfter: 15,
+    reason: 'Histórico operacional prévio validado pela diretoria AFTERHOURS.',
+    createdAt: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
+  },
+];
+
+export function getLocalWalletTransactions(): WalletTransaction[] {
+  const raw = localStorage.getItem(LOCAL_WALLET_TX_KEY);
+  if (!raw) {
+    localStorage.setItem(
+      LOCAL_WALLET_TX_KEY,
+      JSON.stringify(INITIAL_WALLET_TRANSACTIONS)
+    );
+    return INITIAL_WALLET_TRANSACTIONS;
+  }
+  try {
+    return JSON.parse(raw) as WalletTransaction[];
+  } catch {
+    return INITIAL_WALLET_TRANSACTIONS;
+  }
+}
+
+export function getLocalReputationEvents(): ReputationEvent[] {
+  const raw = localStorage.getItem(LOCAL_REP_EVENTS_KEY);
+  if (!raw) {
+    localStorage.setItem(
+      LOCAL_REP_EVENTS_KEY,
+      JSON.stringify(INITIAL_REPUTATION_EVENTS)
+    );
+    return INITIAL_REPUTATION_EVENTS;
+  }
+  try {
+    return JSON.parse(raw) as ReputationEvent[];
+  } catch {
+    return INITIAL_REPUTATION_EVENTS;
+  }
+}
+
+export function recordLocalSettlement(
+  contract: Contract,
+  newBalanceAfter: number,
+  newReputationAfter: number,
+  submissionHash?: string
+): void {
+  const repReward = contract.reputationReward ?? 10;
+
+  const currentTx = getLocalWalletTransactions();
+  const newTx: WalletTransaction = {
+    id: Date.now(),
+    contractId: contract.id,
+    contractTitle: contract.title,
+    amount: contract.reward,
+    balanceAfter: newBalanceAfter,
+    type: 'CONTRACT_SETTLEMENT',
+    description: `Liquidação da operação CTR-${String(contract.id).padStart(4, '0')} (${contract.title})${
+      submissionHash ? ` // HASH: ${submissionHash}` : ''
+    }`,
+    createdAt: new Date().toISOString(),
+  };
+  localStorage.setItem(
+    LOCAL_WALLET_TX_KEY,
+    JSON.stringify([newTx, ...currentTx])
+  );
+
+  const currentRep = getLocalReputationEvents();
+  const newRepEvent: ReputationEvent = {
+    id: Date.now() + 1,
+    delta: repReward,
+    reputationAfter: newReputationAfter,
+    reason: `Execução verificada do contrato CTR-${String(contract.id).padStart(4, '0')}: ${contract.title}`,
+    createdAt: new Date().toISOString(),
+  };
+  localStorage.setItem(
+    LOCAL_REP_EVENTS_KEY,
+    JSON.stringify([newRepEvent, ...currentRep])
+  );
+}
+
+export function updateLocalContract(
+  id: number,
+  updates: Partial<Contract>
+): Contract | null {
+  const all = getLocalCatalogContracts();
+  const existing = all.find((c) => c.id === id);
+  if (!existing) return null;
+
+  const updated: Contract = { ...existing, ...updates };
+  const nextAll = all.map((c) => (c.id === id ? updated : c));
+  localStorage.setItem(LOCAL_CONTRACTS_CACHE_KEY, JSON.stringify(nextAll));
+
+  const myContracts = getLocalMyContracts();
+  if (myContracts.some((c) => c.id === id)) {
+    localStorage.setItem(
+      DEMO_MY_CONTRACTS_KEY,
+      JSON.stringify(myContracts.map((c) => (c.id === id ? updated : c)))
+    );
+  }
+
+  return updated;
+}
+
+export function updateLocalContractStatus(
+  id: number,
+  status: ContractStatus
+): Contract | null {
+  return updateLocalContract(id, { status });
 }

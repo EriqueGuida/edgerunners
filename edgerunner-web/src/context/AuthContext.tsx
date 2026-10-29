@@ -21,6 +21,7 @@ interface AuthContextValue {
   logout: () => void;
   refreshProfile: () => Promise<void>;
   adjustLocalStats: (rewardDelta: number, reputationDelta: number) => void;
+  updateProfileLocal: (updates: Partial<OperatorProfile>) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -157,6 +158,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistOperator(updated);
   };
 
+  const updateProfileLocal = (updates: Partial<OperatorProfile>) => {
+    if (!operator) return;
+    const updated: OperatorProfile = {
+      ...operator,
+      ...updates,
+    };
+    persistOperator(updated);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -169,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         refreshProfile,
         adjustLocalStats,
+        updateProfileLocal,
       }}
     >
       {children}

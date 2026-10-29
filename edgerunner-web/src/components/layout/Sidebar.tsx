@@ -5,6 +5,8 @@ import {
   LayoutDashboard,
   Crosshair,
   FileCode2,
+  Wallet,
+  ShieldAlert,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -50,9 +52,21 @@ const navItems: NavItem[] = [
   },
   {
     label: 'Operações',
-    path: '/my-contracts',
+    path: '/operations',
     code: 'ACT_03',
     icon: FileCode2,
+  },
+  {
+    label: 'Perfil & Carteira',
+    path: '/profile',
+    code: 'PRF_04',
+    icon: Wallet,
+  },
+  {
+    label: 'Painel Admin',
+    path: '/admin',
+    code: 'ADM_05',
+    icon: ShieldAlert,
   },
 ];
 
@@ -429,7 +443,7 @@ export function Sidebar() {
         aria-label="Navegação Rápida Mobile"
         className="md:hidden fixed bottom-0 inset-x-0 h-14 bg-[#0C1017] border-t border-[#1E2636] grid grid-cols-5 z-40"
       >
-        {navItems.map((item) => {
+        {navItems.slice(0, 4).map((item) => {
           const Icon = item.icon;
           return (
             <NavLink
