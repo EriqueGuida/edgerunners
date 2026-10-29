@@ -56,7 +56,7 @@ export function Login() {
     from?: { pathname?: string };
   } | null;
   const registeredMessage = locationState?.registered;
-  const redirectTarget = locationState?.from?.pathname || '/market';
+  const redirectTarget = locationState?.from?.pathname || '/dashboard';
 
   const validateFields = (): boolean => {
     const errors: FieldErrors = {};

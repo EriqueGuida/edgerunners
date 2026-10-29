@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+  LayoutDashboard,
   Crosshair,
   FileCode2,
   LogOut,
@@ -30,15 +31,21 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
+    label: 'Dashboard',
+    path: '/dashboard',
+    code: 'OPS_00',
+    icon: LayoutDashboard,
+  },
+  {
     label: 'Contratos',
-    path: '/market',
+    path: '/contracts',
     code: 'CAT_01',
     icon: Crosshair,
   },
   {
     label: 'Operações',
     path: '/my-contracts',
-    code: 'OPS_02',
+    code: 'ACT_02',
     icon: FileCode2,
   },
 ];
@@ -414,7 +421,7 @@ export function Sidebar() {
 
       <nav
         aria-label="Navegação Rápida Mobile"
-        className="md:hidden fixed bottom-0 inset-x-0 h-14 bg-[#0C1017] border-t border-[#1E2636] grid grid-cols-3 z-40"
+        className="md:hidden fixed bottom-0 inset-x-0 h-14 bg-[#0C1017] border-t border-[#1E2636] grid grid-cols-4 z-40"
       >
         {navItems.map((item) => {
           const Icon = item.icon;

@@ -6,6 +6,7 @@ import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { Dashboard } from './pages/Dashboard';
 import { Market } from './pages/Market';
 import { MyContracts } from './pages/MyContracts';
 
@@ -23,6 +24,8 @@ export function App() {
             {/* Área Operacional Autenticada */}
             <Route element={<ProtectedRoute />}>
               <Route element={<MainLayout />}>
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/contracts" element={<Market />} />
                 <Route path="/market" element={<Market />} />
                 <Route path="/my-contracts" element={<MyContracts />} />
               </Route>

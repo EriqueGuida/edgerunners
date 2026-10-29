@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Radar,
@@ -7,162 +7,134 @@ import {
   Plus,
   X,
   Skull,
+  Search,
+  SlidersHorizontal,
+  ArrowUpDown,
+  RotateCcw,
 } from 'lucide-react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { ContractCard } from '../components/contracts/ContractCard';
-import { DEMO_MY_CONTRACTS_KEY } from './MyContracts';
-import type { Contract, ThreatLevel } from '../types/contract';
+import { ContractBriefingDrawer } from '../components/contracts/ContractBriefingDrawer';
+import {
+  fetchAllContractsUnified,
+  acceptContractUnified,
+  createLocalContract,
+} from '../services/contractStore';
+import type { Contract, ContractStatus, ThreatLevel } from '../types/contract';
 import { soundEngine } from '../utils/sound';
 
-// Contratos de demonstração ambientados no universo original AFTERHOURS (Terra real)
-const FALLBACK_CONTRACTS: Contract[] = [
-  {
-    id: 101,
-    title: 'Extração de Criptografia Quântica em Shinjuku',
-    summary: 'Infiltração silenciosa no cofre de chaves de baixa latência da Aethelgard.',
-    targetName: 'Servidor Kestrel-09',
-    faction: 'Aethelgard Dynamics',
-    locationName: 'Tóquio // Shinjuku (35.6895° N, 139.6917° E)',
-    reward: 45000,
-    threatLevel: 'PSYCHO',
-    status: 'AVAILABLE',
-  },
-  {
-    id: 102,
-    title: 'Interceptação de Remessa Biométrica na Paulista',
-    summary: 'Bloqueio tático de comboio corporativo e extração de amostras criptografadas.',
-    targetName: 'Comboio Blindado V-12',
-    faction: 'Helios Biotech',
-    locationName: 'São Paulo // Av. Paulista (23.5614° S, 46.6559° W)',
-    reward: 28500,
-    threatLevel: 'HIGH',
-    status: 'AVAILABLE',
-  },
-  {
-    id: 103,
-    title: 'Neutralização de Nó Clandestino em Kreuzberg',
-    summary: 'Desconexão física de repetidor de telemetria hostil em subestação urbana.',
-    targetName: 'Estação Subterrânea 04',
-    faction: 'Coletivo Null-Sec',
-    locationName: 'Berlim // Kreuzberg (52.4986° N, 13.4033° E)',
-    reward: 14000,
-    threatLevel: 'MEDIUM',
-    status: 'AVAILABLE',
-  },
-  {
-    id: 104,
-    title: 'Recuperação de Dossiê Financeiro em Marina Bay',
-    summary: 'Auditoria forçada e cópia integral de registros de liquidação offshore.',
-    targetName: 'Cofre Orbital S-3',
-    faction: 'Consórcio Meridian',
-    locationName: 'Singapura // Marina Bay (1.2834° N, 103.8607° E)',
-    reward: 19200,
-    threatLevel: 'HIGH',
-    status: 'AVAILABLE',
-  },
-  {
-    id: 105,
-    title: 'Varredura de Contramedidas em Gangnam',
-    summary: 'Mapeamento passivo de frequências e validação de perímetro de segurança.',
-    targetName: 'Torre Han-River',
-    faction: 'Kurogane Systems',
-    locationName: 'Seul // Gangnam (37.4979° N, 127.0276° E)',
-    reward: 7500,
-    threatLevel: 'LOW',
-    status: 'AVAILABLE',
-  },
-  {
-    id: 106,
-    title: 'Sabotagem de Reator de Dados nos Alpes',
-    summary: 'Injeção de carga térmica controlada em instalação subterrânea de alta segurança.',
-    targetName: 'Bunker Criptográfico Z-01',
-    faction: 'Vanguard Sovereign',
-    locationName: 'Zurique // Setor Alpino (47.3769° N, 8.5417° E)',
-    reward: 62000,
-    threatLevel: 'PSYCHO',
-    status: 'AVAILABLE',
-  },
-];
-
 const THREAT_FILTER_LABELS: Record<ThreatLevel | 'ALL', string> = {
-  ALL: 'TODOS',
+  ALL: 'TODOS OS RISCOS',
   LOW: 'BAIXO',
   MEDIUM: 'MÉDIO',
   HIGH: 'ALTO',
   PSYCHO: 'CRÍTICO',
 };
 
+const STATUS_FILTER_LABELS: Record<ContractStatus | 'ALL', string> = {
+  ALL: 'TODOS OS STATUS',
+  AVAILABLE: 'DISPONÍVEIS',
+  ACCEPTED: 'EM EXECUÇÃO',
+  COMPLETED: 'CONCLUÍDOS',
+  FAILED: 'FALHOS',
+};
+
+const REGION_OPTIONS = [
+  'ALL',
+  'ÁSIA-PACÍFICO',
+  'AMÉRICA LATINA',
+  'EUROPA',
+  'AMÉRICA DO NORTE',
+  'ORIENTE MÉDIO & ÁFRICA',
+] as const;
+
+type SortOption =
+  | 'REWARD_DESC'
+  | 'REWARD_ASC'
+  | 'RISK_DESC'
+  | 'RISK_ASC'
+  | 'REP_ASC'
+  | 'REP_DESC';
+
+const THREAT_WEIGHT: Record<ThreatLevel, number> = {
+  LOW: 1,
+  MEDIUM: 2,
+  HIGH: 3,
+  PSYCHO: 4,
+};
+
 export function Market() {
+  const { operator, refreshProfile } = useAuth();
+  const operatorReputation = operator?.reputation ?? operator?.streetCred ?? 1;
+
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOfflineDemo, setIsOfflineDemo] = useState<boolean>(false);
   const [acceptingId, setAcceptingId] = useState<number | null>(null);
+  const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
+
+  // Estados de Busca, Filtros Combinados e Ordenação (RF-040 a RF-042)
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedThreat, setSelectedThreat] = useState<ThreatLevel | 'ALL'>('ALL');
+  const [selectedStatus, setSelectedStatus] = useState<ContractStatus | 'ALL'>('AVAILABLE');
+  const [selectedRegion, setSelectedRegion] = useState<string>('ALL');
+  const [onlyEligible, setOnlyEligible] = useState<boolean>(false);
+  const [sortBy, setSortBy] = useState<SortOption>('REWARD_DESC');
 
   // Estado para modal de publicação de contrato
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newTarget, setNewTarget] = useState('');
   const [newFaction, setNewFaction] = useState('');
+  const [newLocation, setNewLocation] = useState('');
+  const [newRegion, setNewRegion] = useState('ÁSIA-PACÍFICO');
   const [newReward, setNewReward] = useState('');
+  const [newMinRep, setNewMinRep] = useState('1');
   const [newThreat, setNewThreat] = useState<ThreatLevel>('MEDIUM');
+  const [newSummary, setNewSummary] = useState('');
 
-  const fetchAvailableContracts = useCallback(async () => {
+  const loadContracts = useCallback(async () => {
     setIsLoading(true);
-    setIsOfflineDemo(false);
-
-    try {
-      const response = await api.get<Contract[]>('/api/contracts/available');
-      setContracts(response.data);
-    } catch {
-      setIsOfflineDemo(true);
-      setContracts(FALLBACK_CONTRACTS);
-    } finally {
-      setIsLoading(false);
-    }
+    const { contracts: list, isOffline } = await fetchAllContractsUnified();
+    setContracts(list);
+    setIsOfflineDemo(isOffline);
+    setIsLoading(false);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<Contract[]>('/api/contracts/available')
-      .then((res) => {
-        if (!cancelled) {
-          setContracts(res.data);
-          setIsOfflineDemo(false);
-          setIsLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setContracts(FALLBACK_CONTRACTS);
-          setIsOfflineDemo(true);
-          setIsLoading(false);
-        }
-      });
-
+    fetchAllContractsUnified().then(({ contracts: list, isOffline }) => {
+      if (!cancelled) {
+        setContracts(list);
+        setIsOfflineDemo(isOffline);
+        setIsLoading(false);
+      }
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const handleAcceptContract = async (id: number) => {
-    setAcceptingId(id);
-    const acceptedContract = contracts.find((c) => c.id === id);
+  const handleAcceptContract = async (idOrContract: number | Contract) => {
+    const target =
+      typeof idOrContract === 'number'
+        ? contracts.find((c) => c.id === idOrContract)
+        : idOrContract;
+    if (!target) return;
 
+    setAcceptingId(target.id);
     try {
-      if (!isOfflineDemo) {
-        await api.patch(`/api/contracts/${id}/accept`);
-      } else if (acceptedContract) {
-        const saved = localStorage.getItem(DEMO_MY_CONTRACTS_KEY);
-        const currentMyContracts: Contract[] = saved ? JSON.parse(saved) : [];
-        const updatedMyContracts: Contract[] = [
-          { ...acceptedContract, status: 'ACCEPTED' },
-          ...currentMyContracts.filter((c) => c.id !== id),
-        ];
-        localStorage.setItem(DEMO_MY_CONTRACTS_KEY, JSON.stringify(updatedMyContracts));
+      const { updatedContract, isOffline } = await acceptContractUnified(target);
+      setContracts((prev) =>
+        prev.map((c) => (c.id === target.id ? updatedContract : c))
+      );
+      setSelectedContract((prev) =>
+        prev?.id === target.id ? updatedContract : prev
+      );
+      if (!isOffline) {
+        await refreshProfile();
       }
-      setContracts((prev) => prev.filter((c) => c.id !== id));
     } catch (err) {
       console.error('Erro ao aceitar contrato:', err);
       soundEngine.playWarning();
@@ -177,8 +149,12 @@ export function Market() {
       title: newTitle.trim(),
       targetName: newTarget.trim(),
       faction: newFaction.trim(),
-      reward: Number(newReward) || 5000,
+      reward: Number(newReward) || 15000,
       threatLevel: newThreat,
+      locationName: newLocation.trim() || 'Perímetro Urbano Classificado',
+      region: newRegion,
+      minReputation: Math.max(1, Number(newMinRep) || 1),
+      summary: newSummary.trim() || undefined,
     };
 
     try {
@@ -186,19 +162,18 @@ export function Market() {
         const response = await api.post<Contract>('/api/contracts', payload);
         setContracts((prev) => [response.data, ...prev]);
       } else {
-        const mockCreated: Contract = {
-          id: Math.floor(Math.random() * 900) + 200,
-          ...payload,
-          status: 'AVAILABLE',
-        };
-        setContracts((prev) => [mockCreated, ...prev]);
+        const created = createLocalContract(payload);
+        setContracts((prev) => [created, ...prev]);
       }
       soundEngine.playSuccess();
       setIsCreateModalOpen(false);
       setNewTitle('');
       setNewTarget('');
       setNewFaction('');
+      setNewLocation('');
       setNewReward('');
+      setNewMinRep('1');
+      setNewSummary('');
       setNewThreat('MEDIUM');
     } catch (err) {
       console.error('Erro ao publicar contrato:', err);
@@ -206,15 +181,89 @@ export function Market() {
     }
   };
 
-  const filteredContracts =
-    selectedThreat === 'ALL'
-      ? contracts
-      : contracts.filter((c) => c.threatLevel === selectedThreat);
+  const resetFilters = () => {
+    soundEngine.playClick();
+    setSearchQuery('');
+    setSelectedThreat('ALL');
+    setSelectedStatus('AVAILABLE');
+    setSelectedRegion('ALL');
+    setOnlyEligible(false);
+    setSortBy('REWARD_DESC');
+  };
+
+  const filteredAndSortedContracts = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return contracts
+      .filter((c) => {
+        if (selectedThreat !== 'ALL' && c.threatLevel !== selectedThreat) {
+          return false;
+        }
+        if (selectedStatus !== 'ALL' && c.status !== selectedStatus) {
+          return false;
+        }
+        if (
+          selectedRegion !== 'ALL' &&
+          (c.region || 'GLOBAL').toUpperCase() !== selectedRegion
+        ) {
+          return false;
+        }
+        if (onlyEligible && (c.minReputation ?? 1) > operatorReputation) {
+          return false;
+        }
+        if (query) {
+          const haystack = [
+            c.title,
+            c.targetName,
+            c.faction,
+            c.locationName,
+            c.region,
+            c.summary,
+            `CTR-${String(c.id).padStart(4, '0')}`,
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+
+          if (!haystack.includes(query)) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        switch (sortBy) {
+          case 'REWARD_DESC':
+            return b.reward - a.reward;
+          case 'REWARD_ASC':
+            return a.reward - b.reward;
+          case 'RISK_DESC':
+            return THREAT_WEIGHT[b.threatLevel] - THREAT_WEIGHT[a.threatLevel];
+          case 'RISK_ASC':
+            return THREAT_WEIGHT[a.threatLevel] - THREAT_WEIGHT[b.threatLevel];
+          case 'REP_ASC':
+            return (a.minReputation ?? 1) - (b.minReputation ?? 1);
+          case 'REP_DESC':
+            return (b.minReputation ?? 1) - (a.minReputation ?? 1);
+          default:
+            return 0;
+        }
+      });
+  }, [
+    contracts,
+    searchQuery,
+    selectedThreat,
+    selectedStatus,
+    selectedRegion,
+    onlyEligible,
+    operatorReputation,
+    sortBy,
+  ]);
 
   return (
     <div className="space-y-8">
       {/* =========================================================
-          CABEÇALHO DO CATÁLOGO DE CONTRATOS (Nocturnal Operations Terminal)
+          1. CABEÇALHO DO CATÁLOGO DE CONTRATOS & BUSCA EM TEMPO REAL
          ========================================================= */}
       <div className="border border-[#1E2636] bg-[#0C1017] p-6 md:p-8 ah-corner-marks relative overflow-hidden">
         <div className="h-[1px] w-full bg-[#00E5FF]/50 absolute top-0 left-0" />
@@ -226,14 +275,14 @@ export function Market() {
               <span>CONTRACT DIRECTORY // CAT_01</span>
             </div>
             <h1 className="font-display font-bold text-2xl md:text-3xl tracking-tight text-[#F1F5F9]">
-              Catálogo de Contratos
+              Catálogo Global de Contratos
             </h1>
             <p className="font-sans text-sm text-[#94A3B8] mt-1">
-              Oportunidades operacionais ativas verificadas na rede AFTERHOURS.
+              Explore oportunidades geolocalizadas, filtre por risco ou região e inspecione o dossiê tático antes de vincular sua assinatura.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
             <button
               type="button"
               onClick={() => {
@@ -250,49 +299,182 @@ export function Market() {
               type="button"
               onClick={() => {
                 soundEngine.playClick();
-                fetchAvailableContracts();
+                loadContracts();
               }}
               disabled={isLoading}
               className="px-4 py-2.5 bg-[#111722] border border-[#1E2636] hover:border-[#00E5FF]/60 text-[#F1F5F9] font-mono text-[11px] uppercase tracking-[0.16em] transition-colors flex items-center gap-2 cursor-pointer"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-[#00E5FF]' : 'text-[#94A3B8]'}`} />
-              <span>ATUALIZAR FEED</span>
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${
+                  isLoading ? 'animate-spin text-[#00E5FF]' : 'text-[#94A3B8]'
+                }`}
+              />
+              <span>SINCRONIZAR</span>
             </button>
           </div>
         </div>
 
-        {/* Barra de Filtros por Classificação de Risco */}
-        <div className="mt-6 pt-5 border-t border-[#1E2636] flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[10px] text-[#64748B] uppercase tracking-[0.16em] mr-2">
-              FILTRAR RISCO:
-            </span>
-            {(['ALL', 'LOW', 'MEDIUM', 'HIGH', 'PSYCHO'] as const).map((level) => {
-              const isSelected = selectedThreat === level;
-              return (
+        {/* BARRA DE PESQUISA TEXTUAL + SELETORES DE FILTRO E ORDENAÇÃO */}
+        <div className="mt-6 pt-6 border-t border-[#1E2636] space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+            {/* Busca por texto em tempo real */}
+            <div className="md:col-span-5 relative">
+              <Search className="w-4 h-4 text-[#64748B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por operação, alvo, contratante, cidade ou CTR-ID..."
+                aria-label="Pesquisar contratos"
+                className="w-full pl-10 pr-9 py-2.5 bg-[#07090E] border border-[#1E2636] focus:border-[#00E5FF] font-sans text-xs text-[#F1F5F9] placeholder-[#64748B] focus:outline-none transition-colors"
+              />
+              {searchQuery && (
                 <button
-                  key={level}
                   type="button"
-                  onClick={() => {
-                    soundEngine.playClick();
-                    setSelectedThreat(level);
-                  }}
-                  className={`px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em] border transition-colors cursor-pointer ${
-                    isSelected
-                      ? level === 'PSYCHO'
-                        ? 'bg-[#F43F5E]/15 text-[#F43F5E] border-[#F43F5E] font-semibold'
-                        : 'bg-[#00E5FF]/15 text-[#00E5FF] border-[#00E5FF] font-semibold'
-                      : 'bg-[#111722] border-[#1E2636] text-[#94A3B8] hover:border-[#00E5FF]/40 hover:text-[#F1F5F9]'
-                  }`}
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Limpar busca"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F1F5F9] cursor-pointer"
                 >
-                  {THREAT_FILTER_LABELS[level]}
+                  <X className="w-3.5 h-3.5" />
                 </button>
-              );
-            })}
+              )}
+            </div>
+
+            {/* Filtro por Região Geográfica */}
+            <div className="md:col-span-3">
+              <div className="relative">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-[#00E5FF] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={selectedRegion}
+                  onChange={(e) => {
+                    soundEngine.playClick();
+                    setSelectedRegion(e.target.value);
+                  }}
+                  aria-label="Filtrar por região geográfica"
+                  className="w-full pl-9 pr-3 py-2.5 bg-[#07090E] border border-[#1E2636] focus:border-[#00E5FF] font-mono text-[11px] text-[#F1F5F9] uppercase tracking-[0.12em] focus:outline-none cursor-pointer"
+                >
+                  {REGION_OPTIONS.map((region) => (
+                    <option key={region} value={region}>
+                      {region === 'ALL' ? 'REGIÃO: GLOBAL (TODAS)' : region}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Filtro por Status */}
+            <div className="md:col-span-2">
+              <select
+                value={selectedStatus}
+                onChange={(e) => {
+                  soundEngine.playClick();
+                  setSelectedStatus(e.target.value as ContractStatus | 'ALL');
+                }}
+                aria-label="Filtrar por status do contrato"
+                className="w-full px-3 py-2.5 bg-[#07090E] border border-[#1E2636] focus:border-[#00E5FF] font-mono text-[11px] text-[#F1F5F9] uppercase tracking-[0.12em] focus:outline-none cursor-pointer"
+              >
+                {(['ALL', 'AVAILABLE', 'ACCEPTED', 'COMPLETED', 'FAILED'] as const).map(
+                  (st) => (
+                    <option key={st} value={st}>
+                      {STATUS_FILTER_LABELS[st]}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
+
+            {/* Ordenação */}
+            <div className="md:col-span-2">
+              <div className="relative">
+                <ArrowUpDown className="w-3.5 h-3.5 text-[#00E5FF] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={sortBy}
+                  onChange={(e) => {
+                    soundEngine.playClick();
+                    setSortBy(e.target.value as SortOption);
+                  }}
+                  aria-label="Ordenar contratos"
+                  className="w-full pl-8 pr-2 py-2.5 bg-[#07090E] border border-[#1E2636] focus:border-[#00E5FF] font-mono text-[11px] text-[#F1F5F9] uppercase tracking-[0.1em] focus:outline-none cursor-pointer"
+                >
+                  <option value="REWARD_DESC">MAIOR RECOMPENSA</option>
+                  <option value="REWARD_ASC">MENOR RECOMPENSA</option>
+                  <option value="RISK_DESC">MAIOR RISCO</option>
+                  <option value="RISK_ASC">MENOR RISCO</option>
+                  <option value="REP_ASC">MENOR REP EXIGIDA</option>
+                  <option value="REP_DESC">MAIOR REP EXIGIDA</option>
+                </select>
+              </div>
+            </div>
           </div>
 
-          <div className="font-mono text-[11px] text-[#64748B] uppercase tracking-[0.16em]">
-            DISPONÍVEIS: <strong className="text-[#00E5FF]">{filteredContracts.length}</strong>
+          {/* Linha secundária: Pílulas de Risco + Toggle de Elegibilidade + Contador */}
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {(['ALL', 'LOW', 'MEDIUM', 'HIGH', 'PSYCHO'] as const).map(
+                (level) => {
+                  const isSelected = selectedThreat === level;
+                  return (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => {
+                        soundEngine.playClick();
+                        setSelectedThreat(level);
+                      }}
+                      className={`px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em] border transition-colors cursor-pointer ${
+                        isSelected
+                          ? level === 'PSYCHO'
+                            ? 'bg-[#F43F5E]/15 text-[#F43F5E] border-[#F43F5E] font-semibold'
+                            : 'bg-[#00E5FF]/15 text-[#00E5FF] border-[#00E5FF] font-semibold'
+                          : 'bg-[#111722] border-[#1E2636] text-[#94A3B8] hover:border-[#00E5FF]/40 hover:text-[#F1F5F9]'
+                      }`}
+                    >
+                      {THREAT_FILTER_LABELS[level]}
+                    </button>
+                  );
+                }
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playClick();
+                  setOnlyEligible((prev) => !prev);
+                }}
+                className={`px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em] border transition-colors cursor-pointer ${
+                  onlyEligible
+                    ? 'bg-[#10B981]/15 text-[#10B981] border-[#10B981] font-semibold'
+                    : 'bg-[#111722] border-[#1E2636] text-[#94A3B8] hover:border-[#10B981]/50 hover:text-[#F1F5F9]'
+                }`}
+              >
+                ELEGÍVEIS (REP &le; {operatorReputation})
+              </button>
+            </div>
+
+            <div className="flex items-center gap-4 font-mono text-[11px] text-[#64748B] uppercase tracking-[0.14em]">
+              {(searchQuery ||
+                selectedThreat !== 'ALL' ||
+                selectedStatus !== 'AVAILABLE' ||
+                selectedRegion !== 'ALL' ||
+                onlyEligible) && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="text-[#94A3B8] hover:text-[#00E5FF] flex items-center gap-1 cursor-pointer"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>LIMPAR FILTROS</span>
+                </button>
+              )}
+
+              <span>
+                EXIBINDO:{' '}
+                <strong className="text-[#00E5FF]">
+                  {filteredAndSortedContracts.length}
+                </strong>{' '}
+                / {contracts.length}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -303,14 +485,14 @@ export function Market() {
           <div className="flex items-center gap-2.5">
             <AlertTriangle className="w-4 h-4 text-[#00E5FF] shrink-0" />
             <span>
-              MODO TERMINAL LOCAL: Exibindo catálogo tático em cache (conecte o servidor Spring Boot em localhost:8080 para sincronização MySQL).
+              MODO TERMINAL LOCAL: Catálogo geolocalizado em cache ativo. Clique em qualquer contrato para abrir o Dossiê de Briefing completo.
             </span>
           </div>
         </div>
       )}
 
       {/* =========================================================
-          GRID RESPONSIVO DE CONTRATOS
+          2. GRID RESPONSIVO DE CONTRATOS
          ========================================================= */}
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -326,15 +508,22 @@ export function Market() {
             </div>
           ))}
         </div>
-      ) : filteredContracts.length === 0 ? (
+      ) : filteredAndSortedContracts.length === 0 ? (
         <div className="border border-[#1E2636] bg-[#0C1017] p-12 text-center ah-corner-marks">
           <Skull className="w-8 h-8 text-[#64748B] mx-auto mb-3" />
           <h2 className="font-display font-bold text-xl text-[#F1F5F9]">
             Nenhum contrato localizado
           </h2>
           <p className="font-mono text-xs text-[#64748B] mt-1 uppercase tracking-[0.14em]">
-            Não há contratos disponíveis para os critérios selecionados no momento.
+            Ajuste os filtros de risco, região ou termos de pesquisa para visualizar mais resultados.
           </p>
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="mt-4 px-4 py-2 bg-[#111722] border border-[#1E2636] hover:border-[#00E5FF] font-mono text-xs text-[#00E5FF] uppercase tracking-[0.14em] cursor-pointer"
+          >
+            RESTAURAR PARÂMETROS PADRÃO
+          </button>
         </div>
       ) : (
         <motion.div
@@ -342,7 +531,7 @@ export function Market() {
           className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
         >
           <AnimatePresence mode="popLayout">
-            {filteredContracts.map((contract) => (
+            {filteredAndSortedContracts.map((contract) => (
               <motion.div
                 key={contract.id}
                 layout
@@ -356,7 +545,9 @@ export function Market() {
               >
                 <ContractCard
                   contract={contract}
-                  onAccept={handleAcceptContract}
+                  operatorReputation={operatorReputation}
+                  onSelect={(c) => setSelectedContract(c)}
+                  onAccept={(id) => handleAcceptContract(id)}
                   isAccepting={acceptingId === contract.id}
                 />
               </motion.div>
@@ -366,11 +557,24 @@ export function Market() {
       )}
 
       {/* =========================================================
-          MODAL DE PUBLICAÇÃO DE CONTRATO
+          3. DOSSIÊ CINEMATOGRÁFICO DE BRIEFING (Drawer)
+         ========================================================= */}
+      <ContractBriefingDrawer
+        contract={selectedContract}
+        onClose={() => setSelectedContract(null)}
+        operatorReputation={operatorReputation}
+        onAccept={(c) => handleAcceptContract(c)}
+        isAccepting={
+          selectedContract ? acceptingId === selectedContract.id : false
+        }
+      />
+
+      {/* =========================================================
+          4. MODAL DE PUBLICAÇÃO DE CONTRATO
          ========================================================= */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-[#07090E]/85 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-md bg-[#0C1017] border border-[#1E2636] ah-corner-marks p-6 relative">
+          <div className="w-full max-w-lg bg-[#0C1017] border border-[#1E2636] ah-corner-marks p-6 relative">
             <div className="h-[1px] w-full bg-[#00E5FF] absolute top-0 left-0" />
 
             <div className="flex items-center justify-between border-b border-[#1E2636] pb-3.5 mb-5">
@@ -379,7 +583,7 @@ export function Market() {
                   DISPATCH // NEW BRIEFING
                 </span>
                 <h2 className="font-display font-bold text-lg text-[#F1F5F9]">
-                  Publicar Novo Contrato
+                  Publicar Novo Contrato na Rede
                 </h2>
               </div>
               <button
@@ -407,7 +611,7 @@ export function Market() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-sans text-xs font-medium text-[#94A3B8] mb-1.5">
                     Alvo / Instalação
@@ -417,7 +621,7 @@ export function Market() {
                     required
                     value={newTarget}
                     onChange={(e) => setNewTarget(e.target.value)}
-                    placeholder="Ex: Setor Shinjuku-04"
+                    placeholder="Ex: Servidor Kestrel-09"
                     className="w-full px-3.5 py-2.5 bg-[#07090E] border border-[#1E2636] font-sans text-sm text-[#F1F5F9] placeholder-[#64748B]/50 focus:outline-none focus:border-[#00E5FF]"
                   />
                 </div>
@@ -430,13 +634,44 @@ export function Market() {
                     required
                     value={newFaction}
                     onChange={(e) => setNewFaction(e.target.value)}
-                    placeholder="Ex: Aethelgard Corp"
+                    placeholder="Ex: Aethelgard Dynamics"
                     className="w-full px-3.5 py-2.5 bg-[#07090E] border border-[#1E2636] font-sans text-sm text-[#F1F5F9] placeholder-[#64748B]/50 focus:outline-none focus:border-[#00E5FF]"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-sans text-xs font-medium text-[#94A3B8] mb-1.5">
+                    Cidade / Setor Geográfico
+                  </label>
+                  <input
+                    type="text"
+                    value={newLocation}
+                    onChange={(e) => setNewLocation(e.target.value)}
+                    placeholder="Ex: Shinjuku, Tóquio — Japão"
+                    className="w-full px-3.5 py-2.5 bg-[#07090E] border border-[#1E2636] font-sans text-sm text-[#F1F5F9] placeholder-[#64748B]/50 focus:outline-none focus:border-[#00E5FF]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-sans text-xs font-medium text-[#94A3B8] mb-1.5">
+                    Região Operacional
+                  </label>
+                  <select
+                    value={newRegion}
+                    onChange={(e) => setNewRegion(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-[#07090E] border border-[#1E2636] font-mono text-xs text-[#F1F5F9] focus:outline-none focus:border-[#00E5FF]"
+                  >
+                    {REGION_OPTIONS.filter((r) => r !== 'ALL').map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-sans text-xs font-medium text-[#94A3B8] mb-1.5">
                     Recompensa (¢)
@@ -448,17 +683,30 @@ export function Market() {
                     value={newReward}
                     onChange={(e) => setNewReward(e.target.value)}
                     placeholder="25000"
-                    className="w-full px-3.5 py-2.5 bg-[#07090E] border border-[#1E2636] font-mono text-sm text-[#F1F5F9] placeholder-[#64748B]/50 focus:outline-none focus:border-[#00E5FF]"
+                    className="w-full px-3 py-2.5 bg-[#07090E] border border-[#1E2636] font-mono text-sm text-[#F1F5F9] placeholder-[#64748B]/50 focus:outline-none focus:border-[#00E5FF]"
                   />
                 </div>
                 <div>
                   <label className="block font-sans text-xs font-medium text-[#94A3B8] mb-1.5">
-                    Classificação de risco
+                    REP Mínima
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={newMinRep}
+                    onChange={(e) => setNewMinRep(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-[#07090E] border border-[#1E2636] font-mono text-sm text-[#F1F5F9] focus:outline-none focus:border-[#00E5FF]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-sans text-xs font-medium text-[#94A3B8] mb-1.5">
+                    Risco
                   </label>
                   <select
                     value={newThreat}
                     onChange={(e) => setNewThreat(e.target.value as ThreatLevel)}
-                    className="w-full px-3.5 py-2.5 bg-[#07090E] border border-[#1E2636] font-mono text-xs text-[#F1F5F9] focus:outline-none focus:border-[#00E5FF]"
+                    className="w-full px-3 py-2.5 bg-[#07090E] border border-[#1E2636] font-mono text-xs text-[#F1F5F9] focus:outline-none focus:border-[#00E5FF]"
                   >
                     <option value="LOW">BAIXO</option>
                     <option value="MEDIUM">MÉDIO</option>
@@ -466,6 +714,19 @@ export function Market() {
                     <option value="PSYCHO">CRÍTICO</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-sans text-xs font-medium text-[#94A3B8] mb-1.5">
+                  Resumo Tático (opcional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={newSummary}
+                  onChange={(e) => setNewSummary(e.target.value)}
+                  placeholder="Síntese do objetivo e contexto operacional..."
+                  className="w-full px-3.5 py-2 bg-[#07090E] border border-[#1E2636] font-sans text-xs text-[#F1F5F9] placeholder-[#64748B]/50 focus:outline-none focus:border-[#00E5FF]"
+                />
               </div>
 
               <button

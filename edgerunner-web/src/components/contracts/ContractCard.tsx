@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   XCircle,
   MapPin,
+  FileSearch,
+  Lock,
 } from 'lucide-react';
 import { HoldToAcceptButton } from '../ui/HoldToAcceptButton';
 import type { Contract, ThreatLevel } from '../../types/contract';
@@ -13,9 +15,11 @@ import { soundEngine } from '../../utils/sound';
 
 interface ContractCardProps {
   contract: Contract;
+  onSelect?: (contract: Contract) => void;
   onAccept?: (id: number) => void;
   onComplete?: (id: number) => void;
   onFail?: (id: number) => void;
+  operatorReputation?: number;
   isAccepting?: boolean;
   isProcessing?: boolean;
 }
@@ -57,19 +61,29 @@ const threatStyles: Record<
 
 export function ContractCard({
   contract,
+  onSelect,
   onAccept,
   onComplete,
   onFail,
+  operatorReputation = 999,
   isAccepting = false,
   isProcessing = false,
 }: ContractCardProps) {
   const style = threatStyles[contract.threatLevel] || threatStyles.MEDIUM;
   const isPsycho = contract.threatLevel === 'PSYCHO';
+  const minRep = contract.minReputation ?? 1;
+  const meetsReputation = operatorReputation >= minRep;
 
   const formattedReward = new Intl.NumberFormat('pt-BR', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(contract.reward);
+
+  const handleOpenBriefing = () => {
+    if (!onSelect) return;
+    soundEngine.playClick();
+    onSelect(contract);
+  };
 
   return (
     <article
@@ -81,12 +95,22 @@ export function ContractCard({
 
       {/* Corpo do Card */}
       <div className="p-6 flex-1 flex flex-col justify-between space-y-5">
-        {/* Topo: Identificador Único + Classificação de Risco */}
-        <div>
+        {/* Topo Clicável: Identificador Único + Classificação de Risco + Título */}
+        <div
+          onClick={handleOpenBriefing}
+          className={onSelect ? 'cursor-pointer' : undefined}
+        >
           <div className="flex items-center justify-between gap-2 mb-3">
-            <span className="font-mono text-[11px] text-[#00E5FF] tracking-[0.16em] uppercase">
-              CTR-{String(contract.id).padStart(4, '0')}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[11px] text-[#00E5FF] tracking-[0.16em] uppercase">
+                CTR-{String(contract.id).padStart(4, '0')}
+              </span>
+              {contract.region && (
+                <span className="font-mono text-[10px] text-[#64748B] px-1.5 py-0.5 bg-[#111722] border border-[#1E2636] uppercase tracking-[0.1em]">
+                  {contract.region}
+                </span>
+              )}
+            </div>
 
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 border font-mono text-[10px] tracking-[0.14em] uppercase ${style.badge}`}
@@ -112,8 +136,13 @@ export function ContractCard({
           )}
         </div>
 
-        {/* Metadados Operacionais (Alvo, Organização e Localização) */}
-        <div className="space-y-2 py-3 px-3.5 bg-[#111722] border border-[#1E2636]">
+        {/* Metadados Operacionais (Alvo, Organização, Localização e Reputação Exigida) */}
+        <div
+          onClick={handleOpenBriefing}
+          className={`space-y-2 py-3 px-3.5 bg-[#111722] border border-[#1E2636] ${
+            onSelect ? 'cursor-pointer hover:border-[#00E5FF]/30 transition-colors' : ''
+          }`}
+        >
           <div className="flex items-center justify-between font-mono text-[11px]">
             <span className="flex items-center gap-2 text-[#64748B] uppercase tracking-[0.1em]">
               <Crosshair className="w-3.5 h-3.5 text-[#00E5FF]" />
@@ -145,10 +174,23 @@ export function ContractCard({
               </span>
             </div>
           )}
+
+          <div className="flex items-center justify-between font-mono text-[11px] border-t border-[#1E2636] pt-2">
+            <span className="text-[#64748B] uppercase tracking-[0.1em]">
+              Clearance:
+            </span>
+            <span
+              className={`font-medium tracking-wide ${
+                meetsReputation ? 'text-[#10B981]' : 'text-[#F43F5E]'
+              }`}
+            >
+              REP &ge; {minRep} (+{contract.reputationReward ?? 10} REP)
+            </span>
+          </div>
         </div>
 
-        {/* Rodapé: Recompensa em Créditos Fictícios + Ações */}
-        <div className="pt-3.5 border-t border-[#1E2636] flex flex-wrap items-end justify-between gap-4">
+        {/* Rodapé: Recompensa em Créditos Fictícios + Dossiê + Ações */}
+        <div className="pt-3.5 border-t border-[#1E2636] flex flex-wrap items-end justify-between gap-3">
           <div>
             <span className="block font-mono text-[10px] text-[#64748B] uppercase tracking-[0.14em]">
               Recompensa Estimada
@@ -163,64 +205,90 @@ export function ContractCard({
             </div>
           </div>
 
-          {/* 1. Catálogo (AVAILABLE): Segurar para vincular operação */}
-          {onAccept && contract.status === 'AVAILABLE' && (
-            <HoldToAcceptButton
-              onAccept={() => onAccept(contract.id)}
-              isPsycho={isPsycho}
-              disabled={isAccepting}
-            />
-          )}
+          <div className="flex items-center gap-2">
+            {onSelect && (
+              <button
+                type="button"
+                onClick={handleOpenBriefing}
+                title="Inspecionar Dossiê Completo de Briefing"
+                className="px-3 py-2.5 bg-[#111722] border border-[#1E2636] hover:border-[#00E5FF] text-[#94A3B8] hover:text-[#00E5FF] font-mono text-[11px] uppercase tracking-[0.12em] flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <FileSearch className="w-3.5 h-3.5" />
+                <span>DOSSIÊ</span>
+              </button>
+            )}
 
-          {/* 2. Operações em Andamento (ACCEPTED): Concluir ou Reportar Falha */}
-          {contract.status === 'ACCEPTED' && (onComplete || onFail) && (
-            <div className="flex items-center gap-2">
-              {onComplete && (
+            {/* 1. Catálogo (AVAILABLE): Segurar para vincular operação ou bloqueio por reputação */}
+            {onAccept && contract.status === 'AVAILABLE' && (
+              meetsReputation ? (
+                <HoldToAcceptButton
+                  onAccept={() => onAccept(contract.id)}
+                  isPsycho={isPsycho}
+                  disabled={isAccepting}
+                />
+              ) : (
                 <button
                   type="button"
-                  disabled={isProcessing}
-                  onClick={() => {
-                    soundEngine.playClick();
-                    onComplete(contract.id);
-                  }}
-                  className="px-3.5 py-2 bg-[#10B981]/10 border border-[#10B981]/60 text-[#10B981] hover:bg-[#10B981] hover:text-[#07090E] font-mono text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  onClick={handleOpenBriefing}
+                  className="px-3.5 py-2.5 bg-[#F43F5E]/10 border border-[#F43F5E]/50 text-[#F43F5E] font-mono text-[11px] uppercase tracking-[0.12em] flex items-center gap-1.5 cursor-pointer"
+                  title={`Exige Reputação mínima ${minRep}`}
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>CONCLUIR</span>
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>REP &ge; {minRep}</span>
                 </button>
-              )}
+              )
+            )}
 
-              {onFail && (
-                <button
-                  type="button"
-                  disabled={isProcessing}
-                  onClick={() => {
-                    soundEngine.playClick();
-                    onFail(contract.id);
-                  }}
-                  className="px-3.5 py-2 bg-[#F43F5E]/10 border border-[#F43F5E]/60 text-[#F43F5E] hover:bg-[#F43F5E] hover:text-[#07090E] font-mono text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <XCircle className="w-3.5 h-3.5" />
-                  <span>FALHAR</span>
-                </button>
-              )}
-            </div>
-          )}
+            {/* 2. Operações em Andamento (ACCEPTED): Concluir ou Reportar Falha */}
+            {contract.status === 'ACCEPTED' && (onComplete || onFail) && (
+              <div className="flex items-center gap-2">
+                {onComplete && (
+                  <button
+                    type="button"
+                    disabled={isProcessing}
+                    onClick={() => {
+                      soundEngine.playClick();
+                      onComplete(contract.id);
+                    }}
+                    className="px-3.5 py-2.5 bg-[#10B981]/10 border border-[#10B981]/60 text-[#10B981] hover:bg-[#10B981] hover:text-[#07090E] font-mono text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>CONCLUIR</span>
+                  </button>
+                )}
 
-          {/* 3. Estados Finais Persistidos */}
-          {contract.status === 'COMPLETED' && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#10B981]/10 border border-[#10B981]/50 font-mono text-[11px] font-semibold text-[#10B981] uppercase tracking-[0.14em]">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              CONCLUÍDO
-            </span>
-          )}
+                {onFail && (
+                  <button
+                    type="button"
+                    disabled={isProcessing}
+                    onClick={() => {
+                      soundEngine.playClick();
+                      onFail(contract.id);
+                    }}
+                    className="px-3.5 py-2.5 bg-[#F43F5E]/10 border border-[#F43F5E]/60 text-[#F43F5E] hover:bg-[#F43F5E] hover:text-[#07090E] font-mono text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>FALHAR</span>
+                  </button>
+                )}
+              </div>
+            )}
 
-          {contract.status === 'FAILED' && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F43F5E]/10 border border-[#F43F5E]/50 font-mono text-[11px] font-semibold text-[#F43F5E] uppercase tracking-[0.14em]">
-              <XCircle className="w-3.5 h-3.5" />
-              FALHOU
-            </span>
-          )}
+            {/* 3. Estados Finais Persistidos */}
+            {contract.status === 'COMPLETED' && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#10B981]/10 border border-[#10B981]/50 font-mono text-[11px] font-semibold text-[#10B981] uppercase tracking-[0.14em]">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                CONCLUÍDO
+              </span>
+            )}
+
+            {contract.status === 'FAILED' && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F43F5E]/10 border border-[#F43F5E]/50 font-mono text-[11px] font-semibold text-[#F43F5E] uppercase tracking-[0.14em]">
+                <XCircle className="w-3.5 h-3.5" />
+                FALHOU
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </article>

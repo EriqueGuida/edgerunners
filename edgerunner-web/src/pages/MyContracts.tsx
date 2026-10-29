@@ -13,46 +13,16 @@ import {
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ContractCard } from '../components/contracts/ContractCard';
+import { ContractBriefingDrawer } from '../components/contracts/ContractBriefingDrawer';
+import {
+  DEMO_MY_CONTRACTS_KEY,
+  getLocalMyContracts,
+  pushLocalNotification,
+} from '../services/contractStore';
 import type { Contract, ContractStatus } from '../types/contract';
 import { soundEngine } from '../utils/sound';
 
-export const DEMO_MY_CONTRACTS_KEY = 'afterhours_demo_my_contracts';
-
-const DEFAULT_DEMO_MY_CONTRACTS: Contract[] = [
-  {
-    id: 201,
-    title: 'Infiltração em Subestação de Dados em Frankfurt',
-    summary: 'Extração de registros de roteamento intercontinental sem acionamento de alarmes.',
-    targetName: 'Núcleo Financeiro E-Central',
-    faction: 'Aethelgard Dynamics',
-    locationName: 'Frankfurt // Distrito Financeiro (50.1109° N, 8.6821° E)',
-    reward: 32000,
-    threatLevel: 'HIGH',
-    status: 'ACCEPTED',
-  },
-  {
-    id: 202,
-    title: 'Desativação de Antena de Interceptação no Porto de Santos',
-    summary: 'Interrupção física de enlace clandestino de telemetria marítima.',
-    targetName: 'Terminal Marítimo T-08',
-    faction: 'Consórcio Meridian',
-    locationName: 'Santos // Cais Setor 08 (23.9618° S, 46.3322° W)',
-    reward: 18500,
-    threatLevel: 'MEDIUM',
-    status: 'ACCEPTED',
-  },
-  {
-    id: 203,
-    title: 'Auditoria Forçada em Laboratório Subterrâneo de Seul',
-    summary: 'Cópia forense de chaves de pesquisa biométrica e limpeza de logs.',
-    targetName: 'Unidade Bio-Sintética Songdo',
-    faction: 'Helios Biotech',
-    locationName: 'Seul // Songdo IBD (37.3826° N, 126.6563° E)',
-    reward: 50000,
-    threatLevel: 'PSYCHO',
-    status: 'COMPLETED',
-  },
-];
+export { DEMO_MY_CONTRACTS_KEY };
 
 const STATUS_FILTER_LABELS: Record<ContractStatus | 'ALL', string> = {
   ALL: 'TODOS',
@@ -75,6 +45,7 @@ export function MyContracts() {
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'ALL'>('ALL');
   const [feedback, setFeedback] = useState<FeedbackBanner | null>(null);
+  const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
 
   const operatorCallsign = operator?.callsign || operator?.username || 'OP_VANGUARD';
   const credits = operator?.balance ?? operator?.eddies ?? 0;
@@ -97,15 +68,7 @@ export function MyContracts() {
       await refreshProfile();
     } catch {
       setIsOfflineDemo(true);
-      const savedDemo = localStorage.getItem(DEMO_MY_CONTRACTS_KEY);
-      const initialList: Contract[] = savedDemo
-        ? JSON.parse(savedDemo)
-        : DEFAULT_DEMO_MY_CONTRACTS;
-
-      if (!savedDemo) {
-        localStorage.setItem(DEMO_MY_CONTRACTS_KEY, JSON.stringify(initialList));
-      }
-      setContracts(initialList);
+      setContracts(getLocalMyContracts());
     } finally {
       setIsLoading(false);
     }
@@ -124,15 +87,7 @@ export function MyContracts() {
       })
       .catch(() => {
         if (!cancelled) {
-          const savedDemo = localStorage.getItem(DEMO_MY_CONTRACTS_KEY);
-          const initialList: Contract[] = savedDemo
-            ? JSON.parse(savedDemo)
-            : DEFAULT_DEMO_MY_CONTRACTS;
-
-          if (!savedDemo) {
-            localStorage.setItem(DEMO_MY_CONTRACTS_KEY, JSON.stringify(initialList));
-          }
-          setContracts(initialList);
+          setContracts(getLocalMyContracts());
           setIsOfflineDemo(true);
           setIsLoading(false);
         }
@@ -153,22 +108,36 @@ export function MyContracts() {
         const response = await api.patch<Contract>(`/api/contracts/${id}/complete`);
         const updated = contracts.map((c) => (c.id === id ? response.data : c));
         setContracts(updated);
+        setSelectedContract((prev) => (prev?.id === id ? response.data : prev));
         await refreshProfile();
       } else {
+        const completedContract: Contract = {
+          ...targetContract,
+          status: 'COMPLETED',
+        };
         const updated = contracts.map((c) =>
-          c.id === id ? { ...c, status: 'COMPLETED' as const } : c
+          c.id === id ? completedContract : c
         );
         setContracts(updated);
+        setSelectedContract((prev) =>
+          prev?.id === id ? completedContract : prev
+        );
         localStorage.setItem(DEMO_MY_CONTRACTS_KEY, JSON.stringify(updated));
 
-        adjustLocalStats(targetContract.reward, targetContract.reputationReward ?? 10);
+        const repReward = targetContract.reputationReward ?? 10;
+        adjustLocalStats(targetContract.reward, repReward);
+        pushLocalNotification(
+          `LIQUIDAÇÃO CONFIRMADA // CTR-${String(id).padStart(4, '0')}`,
+          `Recompensa de ${new Intl.NumberFormat('pt-BR').format(targetContract.reward)} ¢ e +${repReward} REP creditados.`,
+          'SUCCESS'
+        );
       }
 
       soundEngine.playSuccess();
       const formattedReward = new Intl.NumberFormat('pt-BR').format(targetContract.reward);
       triggerFeedback(
         'success',
-        `OPERAÇÃO CTR-${String(id).padStart(4, '0')} CONCLUÍDA // +${formattedReward} ¢ CREDITADOS & +10 REPUTAÇÃO`
+        `OPERAÇÃO CTR-${String(id).padStart(4, '0')} CONCLUÍDA // +${formattedReward} ¢ CREDITADOS & +${targetContract.reputationReward ?? 10} REPUTAÇÃO`
       );
     } catch (err) {
       console.error('Erro ao completar contrato:', err);
@@ -186,11 +155,15 @@ export function MyContracts() {
         const response = await api.patch<Contract>(`/api/contracts/${id}/fail`);
         const updated = contracts.map((c) => (c.id === id ? response.data : c));
         setContracts(updated);
+        setSelectedContract((prev) => (prev?.id === id ? response.data : prev));
       } else {
         const updated = contracts.map((c) =>
           c.id === id ? { ...c, status: 'FAILED' as const } : c
         );
         setContracts(updated);
+        setSelectedContract((prev) =>
+          prev?.id === id ? { ...prev, status: 'FAILED' } : prev
+        );
         localStorage.setItem(DEMO_MY_CONTRACTS_KEY, JSON.stringify(updated));
       }
 
@@ -251,7 +224,7 @@ export function MyContracts() {
             <span className="font-mono text-sm font-semibold text-[#00E5FF]">¢</span>
           </div>
           <p className="mt-2.5 font-mono text-[11px] text-[#64748B] uppercase tracking-[0.14em]">
-              OPERADOR: <strong className="text-[#F1F5F9]">{operatorCallsign}</strong>
+            OPERADOR: <strong className="text-[#F1F5F9]">{operatorCallsign}</strong>
           </p>
         </motion.div>
 
@@ -279,12 +252,12 @@ export function MyContracts() {
             <span className="font-display text-3xl font-bold text-[#F1F5F9]">
               {reputation}
             </span>
-            <span className="font-mono text-[11px] text-[#10B981] ml-2">+10 / MISSÃO</span>
+            <span className="font-mono text-[11px] text-[#10B981] ml-2">+REP / MISSÃO</span>
           </div>
           <p className="mt-2.5 font-mono text-[11px] text-[#64748B] uppercase tracking-[0.14em]">
             CREDENCIAL:{' '}
             <strong className="text-[#00E5FF]">
-              {reputation >= 50 ? 'OPERADOR SÊNIOR // NÍVEL ALFA' : 'OPERADOR VERIFICADO'}
+              {reputation >= 30 ? 'OPERADOR SÊNIOR // NÍVEL ALFA' : 'OPERADOR VERIFICADO'}
             </strong>
           </p>
         </motion.div>
@@ -375,7 +348,7 @@ export function MyContracts() {
               Minhas Operações
             </h1>
             <p className="font-sans text-sm text-[#94A3B8] mt-1">
-              Acompanhamento de contratos aceitos, submissão de resultados e histórico operacional.
+              Acompanhamento de contratos aceitos, inspeção de dossiê e submissão de resultados.
             </p>
           </div>
 
@@ -465,6 +438,8 @@ export function MyContracts() {
               >
                 <ContractCard
                   contract={contract}
+                  operatorReputation={reputation}
+                  onSelect={(c) => setSelectedContract(c)}
                   onComplete={handleCompleteContract}
                   onFail={handleFailContract}
                   isProcessing={processingId === contract.id}
@@ -474,6 +449,18 @@ export function MyContracts() {
           </AnimatePresence>
         </motion.div>
       )}
+
+      {/* DOSSIÊ DE BRIEFING */}
+      <ContractBriefingDrawer
+        contract={selectedContract}
+        onClose={() => setSelectedContract(null)}
+        operatorReputation={reputation}
+        onComplete={handleCompleteContract}
+        onFail={handleFailContract}
+        isProcessing={
+          selectedContract ? processingId === selectedContract.id : false
+        }
+      />
     </div>
   );
 }

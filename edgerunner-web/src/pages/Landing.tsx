@@ -148,7 +148,7 @@ export function Landing() {
     DEMONSTRATIVE_SAMPLES.find((item) => item.id === selectedSampleId) ||
     DEMONSTRATIVE_SAMPLES[0];
 
-  const terminalDestination = isAuthenticated ? '/market' : '/login';
+  const terminalDestination = isAuthenticated ? '/dashboard' : '/login';
 
   return (
     <div className="min-h-screen w-full bg-[#07090E] text-[#E6EDF3] selection:bg-[#00E5FF] selection:text-[#07090E] overflow-x-hidden">
