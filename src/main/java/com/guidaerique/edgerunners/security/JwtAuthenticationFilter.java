@@ -16,7 +16,7 @@ import java.io.IOException;
 
 /**
  * Filtro executado uma única vez por requisição HTTP para interceptar e validar tokens JWT.
- * Caso o token seja válido, popula o {@link SecurityContextHolder} com a autenticação do usuário.
+ * Trata tokens expirados ou malformados de forma segura sem interromper a cadeia com erro 500.
  */
 @Component
 @RequiredArgsConstructor
@@ -34,29 +34,32 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         final String authHeader = request.getHeader("Authorization");
 
-        // Ignora requisições sem cabeçalho Bearer, delegando a decisão de acesso aos filtros seguintes.
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // Remove o prefixo "Bearer " (7 caracteres) para isolar o token JWT.
         final String jwt = authHeader.substring(7);
-        final String username = jwtService.extractUsername(jwt);
 
-        // Autentica apenas se o usuário foi extraído e ainda não há autenticação ativa no contexto atual.
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+        try {
+            final String username = jwtService.extractUsername(jwt);
 
-            if (jwtService.isTokenValid(jwt, userDetails)) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities()
-                );
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+
+                if (jwtService.isTokenValid(jwt, userDetails)) {
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
             }
+        } catch (Exception ignored) {
+            // Token expirado, malformado ou usuário inexistente: mantém contexto anônimo para resposta 401/403 limpa.
+            SecurityContextHolder.clearContext();
         }
 
         filterChain.doFilter(request, response);

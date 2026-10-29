@@ -8,19 +8,19 @@ import io.swagger.v3.oas.annotations.security.SecurityScheme;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Configuração da documentação OpenAPI (Swagger) e do esquema de autenticação Bearer JWT.
+ * Configuração da documentação OpenAPI (Swagger) e do esquema de autenticação Bearer JWT do AFTERHOURS.
  */
 @Configuration
 @OpenAPIDefinition(
         info = @Info(
-                title = "Edgerunner Bounty System API",
+                title = "AFTERHOURS // Operational Contract Network API",
                 version = "1.0",
-                description = "Sistema Cyberpunk de gerenciamento de contratos de recompensa para Mercenários e Fixers em Night City."
+                description = "API RESTful para gestão de contratos, operações táticas, carteira fictícia, reputação e administração da rede AFTERHOURS."
         )
 )
 @SecurityScheme(
         name = "bearerAuth",
-        description = "Insira o token JWT obtido no endpoint /auth/login",
+        description = "Insira o token JWT obtido no endpoint /api/auth/login",
         scheme = "bearer",
         type = SecuritySchemeType.HTTP,
         bearerFormat = "JWT",
