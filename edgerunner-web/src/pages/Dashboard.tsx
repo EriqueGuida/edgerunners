@@ -15,6 +15,7 @@ import {
   Clock,
   FileSearch,
   AlertTriangle,
+  Globe2,
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -198,6 +199,15 @@ export function Dashboard() {
             >
               <Crosshair className="w-3.5 h-3.5" />
               <span>CATÁLOGO DE CONTRATOS</span>
+            </Link>
+
+            <Link
+              to="/map"
+              onClick={() => soundEngine.playClick()}
+              className="px-4 py-2.5 bg-[#111722] border border-[#00E5FF]/50 hover:border-[#00E5FF] text-[#00E5FF] font-mono text-[11px] uppercase tracking-[0.16em] flex items-center gap-2 transition-colors"
+            >
+              <Globe2 className="w-3.5 h-3.5" />
+              <span>MAPA GLOBAL</span>
             </Link>
 
             <Link

@@ -25,8 +25,9 @@ export function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<MainLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/contracts" element={<Market />} />
-                <Route path="/market" element={<Market />} />
+                <Route path="/contracts" element={<Market key="catalog-grid" defaultView="GRID" />} />
+                <Route path="/market" element={<Market key="market-grid" defaultView="GRID" />} />
+                <Route path="/map" element={<Market key="catalog-map" defaultView="MAP" />} />
                 <Route path="/my-contracts" element={<MyContracts />} />
               </Route>
             </Route>

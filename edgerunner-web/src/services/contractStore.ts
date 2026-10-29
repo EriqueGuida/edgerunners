@@ -431,6 +431,14 @@ export async function acceptContractUnified(contract: Contract): Promise<{
   }
 }
 
+const REGION_DEFAULT_COORDS: Record<string, { lat: number; lng: number }> = {
+  'ÁSIA-PACÍFICO': { lat: 35.6895, lng: 139.6917 },
+  'AMÉRICA LATINA': { lat: -23.5614, lng: -46.6559 },
+  EUROPA: { lat: 52.4986, lng: 13.4033 },
+  'AMÉRICA DO NORTE': { lat: 40.7549, lng: -73.984 },
+  'ORIENTE MÉDIO & ÁFRICA': { lat: 30.0444, lng: 31.2357 },
+};
+
 export function createLocalContract(payload: {
   title: string;
   targetName: string;
@@ -442,8 +450,13 @@ export function createLocalContract(payload: {
   summary?: string;
   briefing?: string;
   minReputation?: number;
+  latitude?: number;
+  longitude?: number;
 }): Contract {
   const currentCatalog = getLocalCatalogContracts();
+  const fallbackCoords =
+    REGION_DEFAULT_COORDS[payload.region || 'ÁSIA-PACÍFICO'] ||
+    REGION_DEFAULT_COORDS['ÁSIA-PACÍFICO'];
   const created: Contract = {
     id: Math.floor(Math.random() * 700) + 300,
     title: payload.title,
@@ -470,8 +483,8 @@ export function createLocalContract(payload: {
         : 10,
     locationName: payload.locationName || 'Perímetro Urbano Classificado',
     region: payload.region || 'GLOBAL',
-    latitude: 35.6895,
-    longitude: 139.6917,
+    latitude: payload.latitude ?? fallbackCoords.lat,
+    longitude: payload.longitude ?? fallbackCoords.lng,
     verificationPrompt:
       'Informe o hash de telemetria ou código de protocolo obtido no local.',
     createdAt: new Date().toISOString(),

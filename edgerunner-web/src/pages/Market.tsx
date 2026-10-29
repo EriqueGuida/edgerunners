@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Radar,
@@ -11,11 +12,15 @@ import {
   SlidersHorizontal,
   ArrowUpDown,
   RotateCcw,
+  LayoutGrid,
+  Globe2,
+  Columns,
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ContractCard } from '../components/contracts/ContractCard';
 import { ContractBriefingDrawer } from '../components/contracts/ContractBriefingDrawer';
+import { TacticalWorldMap } from '../components/map/TacticalWorldMap';
 import {
   fetchAllContractsUnified,
   acceptContractUnified,
@@ -57,6 +62,8 @@ type SortOption =
   | 'REP_ASC'
   | 'REP_DESC';
 
+type CatalogViewMode = 'GRID' | 'MAP' | 'HYBRID';
+
 const THREAT_WEIGHT: Record<ThreatLevel, number> = {
   LOW: 1,
   MEDIUM: 2,
@@ -64,7 +71,12 @@ const THREAT_WEIGHT: Record<ThreatLevel, number> = {
   PSYCHO: 4,
 };
 
-export function Market() {
+interface MarketProps {
+  defaultView?: CatalogViewMode;
+}
+
+export function Market({ defaultView }: MarketProps = {}) {
+  const location = useLocation();
   const { operator, refreshProfile } = useAuth();
   const operatorReputation = operator?.reputation ?? operator?.streetCred ?? 1;
 
@@ -73,6 +85,18 @@ export function Market() {
   const [isOfflineDemo, setIsOfflineDemo] = useState<boolean>(false);
   const [acceptingId, setAcceptingId] = useState<number | null>(null);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
+
+  // Modo de visualização (RF-106): GRADE, MAPA TÁTICO ou HÍBRIDO
+  const [viewMode, setViewMode] = useState<CatalogViewMode>(() => {
+    if (defaultView) return defaultView;
+    if (
+      location.pathname === '/map' ||
+      location.search.includes('view=map')
+    ) {
+      return 'MAP';
+    }
+    return 'GRID';
+  });
 
   // Estados de Busca, Filtros Combinados e Ordenação (RF-040 a RF-042)
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -89,6 +113,8 @@ export function Market() {
   const [newFaction, setNewFaction] = useState('');
   const [newLocation, setNewLocation] = useState('');
   const [newRegion, setNewRegion] = useState('ÁSIA-PACÍFICO');
+  const [newLatitude, setNewLatitude] = useState('');
+  const [newLongitude, setNewLongitude] = useState('');
   const [newReward, setNewReward] = useState('');
   const [newMinRep, setNewMinRep] = useState('1');
   const [newThreat, setNewThreat] = useState<ThreatLevel>('MEDIUM');
@@ -145,6 +171,9 @@ export function Market() {
 
   const handleCreateContract = async (e: React.FormEvent) => {
     e.preventDefault();
+    const parsedLat = newLatitude.trim() ? Number(newLatitude) : undefined;
+    const parsedLng = newLongitude.trim() ? Number(newLongitude) : undefined;
+
     const payload = {
       title: newTitle.trim(),
       targetName: newTarget.trim(),
@@ -153,6 +182,14 @@ export function Market() {
       threatLevel: newThreat,
       locationName: newLocation.trim() || 'Perímetro Urbano Classificado',
       region: newRegion,
+      latitude:
+        typeof parsedLat === 'number' && !Number.isNaN(parsedLat)
+          ? parsedLat
+          : undefined,
+      longitude:
+        typeof parsedLng === 'number' && !Number.isNaN(parsedLng)
+          ? parsedLng
+          : undefined,
       minReputation: Math.max(1, Number(newMinRep) || 1),
       summary: newSummary.trim() || undefined,
     };
@@ -171,6 +208,8 @@ export function Market() {
       setNewTarget('');
       setNewFaction('');
       setNewLocation('');
+      setNewLatitude('');
+      setNewLongitude('');
       setNewReward('');
       setNewMinRep('1');
       setNewSummary('');
@@ -268,21 +307,76 @@ export function Market() {
       <div className="border border-[#1E2636] bg-[#0C1017] p-6 md:p-8 ah-corner-marks relative overflow-hidden">
         <div className="h-[1px] w-full bg-[#00E5FF]/50 absolute top-0 left-0" />
 
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-5">
           <div>
             <div className="flex items-center gap-2 font-mono text-[11px] text-[#00E5FF] uppercase tracking-[0.18em] mb-1.5">
               <Radar className="w-3.5 h-3.5 text-[#00E5FF]" />
-              <span>CONTRACT DIRECTORY // CAT_01</span>
+              <span>CONTRACT DIRECTORY &amp; EARTH CARTOGRAPHY // CAT_01</span>
             </div>
             <h1 className="font-display font-bold text-2xl md:text-3xl tracking-tight text-[#F1F5F9]">
               Catálogo Global de Contratos
             </h1>
             <p className="font-sans text-sm text-[#94A3B8] mt-1">
-              Explore oportunidades geolocalizadas, filtre por risco ou região e inspecione o dossiê tático antes de vincular sua assinatura.
+              alterne entre a grade de dossiês e o mapa geográfico real da Terra (WGS84) mantendo todos os filtros sincronizados.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 shrink-0">
+            {/* Alternador de Modo de Visualização (RF-106): GRADE / MAPA / HÍBRIDO */}
+            <div
+              role="group"
+              aria-label="Modo de visualização do catálogo"
+              className="inline-flex bg-[#07090E] border border-[#1E2636] p-0.5"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playClick();
+                  setViewMode('GRID');
+                }}
+                className={`px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  viewMode === 'GRID'
+                    ? 'bg-[#00E5FF] text-[#07090E] font-semibold'
+                    : 'text-[#94A3B8] hover:text-[#F1F5F9]'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>GRADE</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playClick();
+                  setViewMode('MAP');
+                }}
+                className={`px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  viewMode === 'MAP'
+                    ? 'bg-[#00E5FF] text-[#07090E] font-semibold'
+                    : 'text-[#94A3B8] hover:text-[#F1F5F9]'
+                }`}
+              >
+                <Globe2 className="w-3.5 h-3.5" />
+                <span>MAPA GLOBAL</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playClick();
+                  setViewMode('HYBRID');
+                }}
+                className={`px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  viewMode === 'HYBRID'
+                    ? 'bg-[#00E5FF] text-[#07090E] font-semibold'
+                    : 'text-[#94A3B8] hover:text-[#F1F5F9]'
+                }`}
+              >
+                <Columns className="w-3.5 h-3.5" />
+                <span>HÍBRIDO</span>
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={() => {
@@ -302,14 +396,13 @@ export function Market() {
                 loadContracts();
               }}
               disabled={isLoading}
-              className="px-4 py-2.5 bg-[#111722] border border-[#1E2636] hover:border-[#00E5FF]/60 text-[#F1F5F9] font-mono text-[11px] uppercase tracking-[0.16em] transition-colors flex items-center gap-2 cursor-pointer"
+              className="px-3.5 py-2.5 bg-[#111722] border border-[#1E2636] hover:border-[#00E5FF]/60 text-[#F1F5F9] font-mono text-[11px] uppercase tracking-[0.16em] transition-colors flex items-center gap-2 cursor-pointer"
             >
               <RefreshCw
                 className={`w-3.5 h-3.5 ${
                   isLoading ? 'animate-spin text-[#00E5FF]' : 'text-[#94A3B8]'
                 }`}
               />
-              <span>SINCRONIZAR</span>
             </button>
           </div>
         </div>
@@ -485,79 +578,97 @@ export function Market() {
           <div className="flex items-center gap-2.5">
             <AlertTriangle className="w-4 h-4 text-[#00E5FF] shrink-0" />
             <span>
-              MODO TERMINAL LOCAL: Catálogo geolocalizado em cache ativo. Clique em qualquer contrato para abrir o Dossiê de Briefing completo.
+              MODO TERMINAL LOCAL: Catálogo geolocalizado em cache ativo. Alterne entre GRADE e MAPA GLOBAL ou clique em qualquer contrato para abrir o Dossiê de Briefing.
             </span>
           </div>
         </div>
       )}
 
       {/* =========================================================
-          2. GRID RESPONSIVO DE CONTRATOS
+          2. MAPA GEOGRÁFICO REAL DA TERRA — MAPLIBRE GL JS (RF-100 a RF-108)
          ========================================================= */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {[1, 2, 3, 4, 5, 6].map((skeleton) => (
-            <div
-              key={skeleton}
-              className="h-64 bg-[#0C1017] border border-[#1E2636] p-6 animate-pulse flex flex-col justify-between"
-            >
-              <div className="h-4 w-1/3 bg-[#1E2636]" />
-              <div className="h-6 w-3/4 bg-[#1E2636]" />
-              <div className="h-16 w-full bg-[#111722] border border-[#1E2636]" />
-              <div className="h-8 w-1/2 bg-[#1E2636]" />
-            </div>
-          ))}
-        </div>
-      ) : filteredAndSortedContracts.length === 0 ? (
-        <div className="border border-[#1E2636] bg-[#0C1017] p-12 text-center ah-corner-marks">
-          <Skull className="w-8 h-8 text-[#64748B] mx-auto mb-3" />
-          <h2 className="font-display font-bold text-xl text-[#F1F5F9]">
-            Nenhum contrato localizado
-          </h2>
-          <p className="font-mono text-xs text-[#64748B] mt-1 uppercase tracking-[0.14em]">
-            Ajuste os filtros de risco, região ou termos de pesquisa para visualizar mais resultados.
-          </p>
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="mt-4 px-4 py-2 bg-[#111722] border border-[#1E2636] hover:border-[#00E5FF] font-mono text-xs text-[#00E5FF] uppercase tracking-[0.14em] cursor-pointer"
-          >
-            RESTAURAR PARÂMETROS PADRÃO
-          </button>
-        </div>
-      ) : (
-        <motion.div
-          layout
-          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
-        >
-          <AnimatePresence mode="popLayout">
-            {filteredAndSortedContracts.map((contract) => (
-              <motion.div
-                key={contract.id}
-                layout
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{
-                  opacity: 0,
-                  scale: 0.95,
-                  transition: { duration: 0.18 },
-                }}
-              >
-                <ContractCard
-                  contract={contract}
-                  operatorReputation={operatorReputation}
-                  onSelect={(c) => setSelectedContract(c)}
-                  onAccept={(id) => handleAcceptContract(id)}
-                  isAccepting={acceptingId === contract.id}
-                />
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </motion.div>
+      {(viewMode === 'MAP' || viewMode === 'HYBRID') && !isLoading && (
+        <TacticalWorldMap
+          contracts={filteredAndSortedContracts}
+          mode={viewMode === 'MAP' ? 'FULL_MAP' : 'HYBRID'}
+          operatorReputation={operatorReputation}
+          onOpenDossier={(c) => setSelectedContract(c)}
+          onAcceptContract={(c) => handleAcceptContract(c)}
+          acceptingId={acceptingId}
+        />
       )}
 
       {/* =========================================================
-          3. DOSSIÊ CINEMATOGRÁFICO DE BRIEFING (Drawer)
+          3. GRID RESPONSIVO DE CONTRATOS
+         ========================================================= */}
+      {(viewMode === 'GRID' || viewMode === 'HYBRID') && (
+        <>
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+              {[1, 2, 3, 4, 5, 6].map((skeleton) => (
+                <div
+                  key={skeleton}
+                  className="h-64 bg-[#0C1017] border border-[#1E2636] p-6 animate-pulse flex flex-col justify-between"
+                >
+                  <div className="h-4 w-1/3 bg-[#1E2636]" />
+                  <div className="h-6 w-3/4 bg-[#1E2636]" />
+                  <div className="h-16 w-full bg-[#111722] border border-[#1E2636]" />
+                  <div className="h-8 w-1/2 bg-[#1E2636]" />
+                </div>
+              ))}
+            </div>
+          ) : filteredAndSortedContracts.length === 0 ? (
+            <div className="border border-[#1E2636] bg-[#0C1017] p-12 text-center ah-corner-marks">
+              <Skull className="w-8 h-8 text-[#64748B] mx-auto mb-3" />
+              <h2 className="font-display font-bold text-xl text-[#F1F5F9]">
+                Nenhum contrato localizado
+              </h2>
+              <p className="font-mono text-xs text-[#64748B] mt-1 uppercase tracking-[0.14em]">
+                Ajuste os filtros de risco, região ou termos de pesquisa para visualizar mais resultados.
+              </p>
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="mt-4 px-4 py-2 bg-[#111722] border border-[#1E2636] hover:border-[#00E5FF] font-mono text-xs text-[#00E5FF] uppercase tracking-[0.14em] cursor-pointer"
+              >
+                RESTAURAR PARÂMETROS PADRÃO
+              </button>
+            </div>
+          ) : (
+            <motion.div
+              layout
+              className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6"
+            >
+              <AnimatePresence mode="popLayout">
+                {filteredAndSortedContracts.map((contract) => (
+                  <motion.div
+                    key={contract.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{
+                      opacity: 0,
+                      scale: 0.95,
+                      transition: { duration: 0.18 },
+                    }}
+                  >
+                    <ContractCard
+                      contract={contract}
+                      operatorReputation={operatorReputation}
+                      onSelect={(c) => setSelectedContract(c)}
+                      onAccept={(id) => handleAcceptContract(id)}
+                      isAccepting={acceptingId === contract.id}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </motion.div>
+          )}
+        </>
+      )}
+
+      {/* =========================================================
+          4. DOSSIÊ CINEMATOGRÁFICO DE BRIEFING (Drawer)
          ========================================================= */}
       <ContractBriefingDrawer
         contract={selectedContract}
@@ -570,17 +681,17 @@ export function Market() {
       />
 
       {/* =========================================================
-          4. MODAL DE PUBLICAÇÃO DE CONTRATO
+          5. MODAL DE PUBLICAÇÃO DE CONTRATO GEOLOCALIZADO
          ========================================================= */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-[#07090E]/85 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-lg bg-[#0C1017] border border-[#1E2636] ah-corner-marks p-6 relative">
+          <div className="w-full max-w-lg bg-[#0C1017] border border-[#1E2636] ah-corner-marks p-6 relative max-h-[92vh] overflow-y-auto">
             <div className="h-[1px] w-full bg-[#00E5FF] absolute top-0 left-0" />
 
             <div className="flex items-center justify-between border-b border-[#1E2636] pb-3.5 mb-5">
               <div>
                 <span className="font-mono text-[10px] text-[#00E5FF] uppercase tracking-[0.16em] block">
-                  DISPATCH // NEW BRIEFING
+                  DISPATCH // GEOLOCATED BRIEFING
                 </span>
                 <h2 className="font-display font-bold text-lg text-[#F1F5F9]">
                   Publicar Novo Contrato na Rede
@@ -668,6 +779,39 @@ export function Market() {
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-sans text-xs font-medium text-[#94A3B8] mb-1.5">
+                    Latitude WGS84 (opcional)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="-90"
+                    max="90"
+                    value={newLatitude}
+                    onChange={(e) => setNewLatitude(e.target.value)}
+                    placeholder="Ex: 35.6895"
+                    className="w-full px-3.5 py-2 bg-[#07090E] border border-[#1E2636] font-mono text-xs text-[#F1F5F9] placeholder-[#64748B]/50 focus:outline-none focus:border-[#00E5FF]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-sans text-xs font-medium text-[#94A3B8] mb-1.5">
+                    Longitude WGS84 (opcional)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="-180"
+                    max="180"
+                    value={newLongitude}
+                    onChange={(e) => setNewLongitude(e.target.value)}
+                    placeholder="Ex: 139.6917"
+                    className="w-full px-3.5 py-2 bg-[#07090E] border border-[#1E2636] font-mono text-xs text-[#F1F5F9] placeholder-[#64748B]/50 focus:outline-none focus:border-[#00E5FF]"
+                  />
                 </div>
               </div>
 

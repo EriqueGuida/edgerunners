@@ -108,6 +108,91 @@
     position: relative;
     display: inline-block;
   }
+
+  .ah-corner-marks {
+    position: relative;
+  }
+
+  .ah-corner-marks::before,
+  .ah-corner-marks::after {
+    content: '';
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    pointer-events: none;
+  }
+
+  .ah-corner-marks::before {
+    top: -1px;
+    left: -1px;
+    border-top: 1.5px solid rgba(0, 229, 255, 0.45);
+    border-left: 1.5px solid rgba(0, 229, 255, 0.45);
+  }
+
+  .ah-corner-marks::after {
+    bottom: -1px;
+    right: -1px;
+    border-bottom: 1.5px solid rgba(0, 229, 255, 0.45);
+    border-right: 1.5px solid rgba(0, 229, 255, 0.45);
+  }
+
+  .ah-tactical-grid {
+    background-image: linear-gradient(to right, rgba(30, 38, 54, 0.35) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(30, 38, 54, 0.35) 1px, transparent 1px);
+    background-size: 36px 36px;
+  }
+}
+
+/* Estilização Tática MapLibre GL JS (Nocturnal Operations Terminal) */
+.maplibregl-map {
+  width: 100% !important;
+  height: 100% !important;
+  background-color: #07090E !important;
+  font-family: 'IBM Plex Mono', monospace !important;
+}
+
+.maplibregl-canvas-container,
+.maplibregl-canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Filtro Cartográfico Noturno sobre tiles OpenStreetMap (100% livre de chave de API) */
+.ah-nocturnal-osm .maplibregl-canvas {
+  filter: invert(100%) hue-rotate(192deg) saturate(65%) brightness(84%) contrast(122%);
+}
+
+.maplibregl-ctrl-group {
+  background: #0C1017 !important;
+  border: 1px solid #1E2636 !important;
+  border-radius: 0px !important;
+  box-shadow: none !important;
+}
+
+.maplibregl-ctrl-group button {
+  border-bottom: 1px solid #1E2636 !important;
+}
+
+.maplibregl-ctrl-group button:hover {
+  background-color: #111722 !important;
+}
+
+.maplibregl-ctrl-icon {
+  filter: invert(0.85) sepia(0.2) saturate(3) hue-rotate(155deg) !important;
+}
+
+.maplibregl-ctrl-attrib {
+  background-color: rgba(7, 9, 14, 0.85) !important;
+  color: #64748B !important;
+  font-family: 'IBM Plex Mono', monospace !important;
+  font-size: 10px !important;
+  border-top: 1px solid #1E2636 !important;
+  border-left: 1px solid #1E2636 !important;
+  border-radius: 0 !important;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: #94A3B8 !important;
 }
 
 /* 6. Respeito Estrito a prefers-reduced-motion e Modo Simplificado (Seção 6) */

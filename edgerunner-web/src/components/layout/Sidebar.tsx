@@ -43,9 +43,15 @@ const navItems: NavItem[] = [
     icon: Crosshair,
   },
   {
+    label: 'Mapa Global',
+    path: '/map',
+    code: 'GEO_02',
+    icon: Globe2,
+  },
+  {
     label: 'Operações',
     path: '/my-contracts',
-    code: 'ACT_02',
+    code: 'ACT_03',
     icon: FileCode2,
   },
 ];
@@ -421,7 +427,7 @@ export function Sidebar() {
 
       <nav
         aria-label="Navegação Rápida Mobile"
-        className="md:hidden fixed bottom-0 inset-x-0 h-14 bg-[#0C1017] border-t border-[#1E2636] grid grid-cols-4 z-40"
+        className="md:hidden fixed bottom-0 inset-x-0 h-14 bg-[#0C1017] border-t border-[#1E2636] grid grid-cols-5 z-40"
       >
         {navItems.map((item) => {
           const Icon = item.icon;

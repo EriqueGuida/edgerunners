@@ -124,9 +124,9 @@ export function MainLayout() {
           </div>
         </header>
 
-        {/* Renderização das Rotas Filhas com Transição Adaptativa */}
-        <main className="flex-1 overflow-y-auto p-4 pb-24 md:p-8 z-10">
-          <div className="max-w-[1320px] mx-auto">
+        {/* Renderização das Rotas Filhas com Transição Adaptativa — Ocupando 100% da largura disponível */}
+        <main className="flex-1 overflow-y-auto px-4 py-5 pb-24 md:px-6 lg:px-8 md:py-6 z-10">
+          <div className="w-full h-full">
             <AnimatePresence mode="wait">
               <motion.div
                 key={location.pathname}
