@@ -1,0 +1,86 @@
+/* 1. Importação das Fontes Google: Rajdhani & Share Tech Mono */
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+/* 2. Diretivas do Tailwind CSS */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 3. Reset e Base OLED Cyberpunk */
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    background-color: #050508;
+    color: #F3F4F6;
+    font-family: 'Rajdhani', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  /* Seleção de texto em Amarelo Cyberpunk */
+  ::selection {
+    background-color: #FCEE0A;
+    color: #050508;
+  }
+}
+
+/* 4. Utilitários de Estética Clean Cyberpunk */
+@layer components {
+  /* Corte angular clássico de HUD Cyberpunk no canto inferior direito */
+  .cyber-chamfer {
+    clip-path: polygon(
+      0 0,
+      100% 0,
+      100% calc(100% - 14px),
+      calc(100% - 14px) 100%,
+      0 100%
+    );
+  }
+
+  /* Corte duplo (superior esquerdo + inferior direito) para Cards e Botões */
+  .cyber-chamfer-dual {
+    clip-path: polygon(
+      12px 0,
+      100% 0,
+      100% calc(100% - 12px),
+      calc(100% - 12px) 100%,
+      0 100%,
+      0 12px
+    );
+  }
+
+  /* Efeito sutil de scanline para containers de terminal */
+  .cyber-scanlines {
+    background: linear-gradient(
+      rgba(18, 16, 16, 0) 50%,
+      rgba(0, 0, 0, 0.25) 50%
+    );
+    background-size: 100% 4px;
+  }
+}
+
+/* 5. Scrollbar Minimalista Neon */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #050508;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1F2335;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00F0FF;
+}
