@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Wallet,
@@ -10,7 +10,8 @@ import {
   AlertTriangle,
   Terminal,
 } from 'lucide-react';
-import api, { USER_KEY } from '../services/api';
+import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { ContractCard } from '../components/contracts/ContractCard';
 import type { Contract, ContractStatus } from '../types/contract';
 import { soundEngine } from '../utils/sound';
@@ -21,8 +22,10 @@ const DEFAULT_DEMO_MY_CONTRACTS: Contract[] = [
   {
     id: 201,
     title: 'Infiltração em Subestação de Dados em Frankfurt',
+    summary: 'Extração de registros de roteamento intercontinental sem acionamento de alarmes.',
     targetName: 'Núcleo Financeiro E-Central',
     faction: 'Aethelgard Dynamics',
+    locationName: 'Frankfurt // Distrito Financeiro (50.1109° N, 8.6821° E)',
     reward: 32000,
     threatLevel: 'HIGH',
     status: 'ACCEPTED',
@@ -30,8 +33,10 @@ const DEFAULT_DEMO_MY_CONTRACTS: Contract[] = [
   {
     id: 202,
     title: 'Desativação de Antena de Interceptação no Porto de Santos',
+    summary: 'Interrupção física de enlace clandestino de telemetria marítima.',
     targetName: 'Terminal Marítimo T-08',
     faction: 'Consórcio Meridian',
+    locationName: 'Santos // Cais Setor 08 (23.9618° S, 46.3322° W)',
     reward: 18500,
     threatLevel: 'MEDIUM',
     status: 'ACCEPTED',
@@ -39,8 +44,10 @@ const DEFAULT_DEMO_MY_CONTRACTS: Contract[] = [
   {
     id: 203,
     title: 'Auditoria Forçada em Laboratório Subterrâneo de Seul',
+    summary: 'Cópia forense de chaves de pesquisa biométrica e limpeza de logs.',
     targetName: 'Unidade Bio-Sintética Songdo',
     faction: 'Helios Biotech',
+    locationName: 'Seul // Songdo IBD (37.3826° N, 126.6563° E)',
     reward: 50000,
     threatLevel: 'PSYCHO',
     status: 'COMPLETED',
@@ -50,7 +57,7 @@ const DEFAULT_DEMO_MY_CONTRACTS: Contract[] = [
 const STATUS_FILTER_LABELS: Record<ContractStatus | 'ALL', string> = {
   ALL: 'TODOS',
   AVAILABLE: 'DISPONÍVEIS',
-  ACCEPTED: 'EM ANDAMENTO',
+  ACCEPTED: 'EM EXECUÇÃO',
   COMPLETED: 'CONCLUÍDOS',
   FAILED: 'FALHOS',
 };
@@ -61,6 +68,7 @@ interface FeedbackBanner {
 }
 
 export function MyContracts() {
+  const { operator, adjustLocalStats, refreshProfile } = useAuth();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOfflineDemo, setIsOfflineDemo] = useState<boolean>(false);
@@ -68,10 +76,9 @@ export function MyContracts() {
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'ALL'>('ALL');
   const [feedback, setFeedback] = useState<FeedbackBanner | null>(null);
 
-  // Indicadores do Operador (Carteira Fictícia e Reputação)
-  const [credits, setCredits] = useState<number>(0);
-  const [reputation, setReputation] = useState<number>(1);
-  const operatorCallsign = localStorage.getItem(USER_KEY) || 'OP_VANGUARD';
+  const operatorCallsign = operator?.callsign || operator?.username || 'OP_VANGUARD';
+  const credits = operator?.balance ?? operator?.eddies ?? 0;
+  const reputation = operator?.reputation ?? operator?.streetCred ?? 1;
 
   const triggerFeedback = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message });
@@ -80,29 +87,14 @@ export function MyContracts() {
     }, 4500);
   };
 
-  const syncKpisFromContracts = (list: Contract[]) => {
-    const hunterWithStats = list.find((c) => c.hunter)?.hunter;
-    if (hunterWithStats) {
-      setCredits(hunterWithStats.eddies);
-      setReputation(hunterWithStats.streetCred);
-      return;
-    }
-
-    const completedList = list.filter((c) => c.status === 'COMPLETED');
-    const totalEarned = completedList.reduce((acc, c) => acc + c.reward, 0);
-    const totalRep = 1 + completedList.length * 10;
-    setCredits(totalEarned);
-    setReputation(totalRep);
-  };
-
-  const fetchMyContracts = async () => {
+  const fetchMyContracts = useCallback(async () => {
     setIsLoading(true);
     setIsOfflineDemo(false);
 
     try {
       const response = await api.get<Contract[]>('/api/contracts/my-contracts');
       setContracts(response.data);
-      syncKpisFromContracts(response.data);
+      await refreshProfile();
     } catch {
       setIsOfflineDemo(true);
       const savedDemo = localStorage.getItem(DEMO_MY_CONTRACTS_KEY);
@@ -114,14 +106,41 @@ export function MyContracts() {
         localStorage.setItem(DEMO_MY_CONTRACTS_KEY, JSON.stringify(initialList));
       }
       setContracts(initialList);
-      syncKpisFromContracts(initialList);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [refreshProfile]);
 
   useEffect(() => {
-    fetchMyContracts();
+    let cancelled = false;
+    api
+      .get<Contract[]>('/api/contracts/my-contracts')
+      .then((res) => {
+        if (!cancelled) {
+          setContracts(res.data);
+          setIsOfflineDemo(false);
+          setIsLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          const savedDemo = localStorage.getItem(DEMO_MY_CONTRACTS_KEY);
+          const initialList: Contract[] = savedDemo
+            ? JSON.parse(savedDemo)
+            : DEFAULT_DEMO_MY_CONTRACTS;
+
+          if (!savedDemo) {
+            localStorage.setItem(DEMO_MY_CONTRACTS_KEY, JSON.stringify(initialList));
+          }
+          setContracts(initialList);
+          setIsOfflineDemo(true);
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleCompleteContract = async (id: number) => {
@@ -134,21 +153,22 @@ export function MyContracts() {
         const response = await api.patch<Contract>(`/api/contracts/${id}/complete`);
         const updated = contracts.map((c) => (c.id === id ? response.data : c));
         setContracts(updated);
-        syncKpisFromContracts(updated);
+        await refreshProfile();
       } else {
         const updated = contracts.map((c) =>
           c.id === id ? { ...c, status: 'COMPLETED' as const } : c
         );
         setContracts(updated);
         localStorage.setItem(DEMO_MY_CONTRACTS_KEY, JSON.stringify(updated));
-        syncKpisFromContracts(updated);
+
+        adjustLocalStats(targetContract.reward, targetContract.reputationReward ?? 10);
       }
 
       soundEngine.playSuccess();
       const formattedReward = new Intl.NumberFormat('pt-BR').format(targetContract.reward);
       triggerFeedback(
         'success',
-        `OPERAÇÃO #${String(id).padStart(4, '0')} CONCLUÍDA // +CR¢ ${formattedReward} CREDITADOS & +10 REPUTAÇÃO!`
+        `OPERAÇÃO CTR-${String(id).padStart(4, '0')} CONCLUÍDA // +${formattedReward} ¢ CREDITADOS & +10 REPUTAÇÃO`
       );
     } catch (err) {
       console.error('Erro ao completar contrato:', err);
@@ -177,7 +197,7 @@ export function MyContracts() {
       soundEngine.playWarning();
       triggerFeedback(
         'error',
-        `OPERAÇÃO #${String(id).padStart(4, '0')} ENCERRADA SEM SUCESSO // REGISTRO ARQUIVADO.`
+        `OPERAÇÃO CTR-${String(id).padStart(4, '0')} ENCERRADA SEM SUCESSO // REGISTRO ARQUIVADO.`
       );
     } catch (err) {
       console.error('Erro ao marcar falha no contrato:', err);
@@ -212,26 +232,26 @@ export function MyContracts() {
           key={`credits-${credits}`}
           initial={{ scale: 0.99 }}
           animate={{ scale: 1 }}
-          className="bg-dark-surface border border-edgerunner-yellow/60 p-6 cyber-chamfer ah-reticle shadow-hud-yellow relative overflow-hidden"
+          className="bg-[#0C1017] border border-[#1E2636] p-6 ah-corner-marks relative overflow-hidden"
         >
-          <div className="h-1 w-full bg-edgerunner-yellow absolute top-0 left-0" />
+          <div className="h-[1px] w-full bg-[#00E5FF] absolute top-0 left-0" />
           <div className="flex items-center justify-between">
-            <span className="font-mono text-xs text-gray-400 uppercase tracking-widest">
-              // Carteira de Créditos
+            <span className="font-mono text-[11px] text-[#64748B] uppercase tracking-[0.16em]">
+              CARTEIRA OPERACIONAL
             </span>
-            <div className="w-9 h-9 bg-edgerunner-yellow/10 border border-edgerunner-yellow flex items-center justify-center">
-              <Wallet className="w-4 h-4 text-edgerunner-yellow" />
+            <div className="w-8 h-8 bg-[#111722] border border-[#1E2636] flex items-center justify-center">
+              <Wallet className="w-4 h-4 text-[#00E5FF]" />
             </div>
           </div>
 
-          <div className="mt-4 flex items-baseline gap-2">
-            <span className="font-mono text-sm font-bold text-neon-green">CR¢</span>
-            <span className="font-mono text-3xl md:text-4xl font-bold text-edgerunner-yellow">
+          <div className="mt-4 flex items-baseline gap-1.5">
+            <span className="font-display text-3xl font-bold text-[#F1F5F9]">
               {formattedCredits}
             </span>
+            <span className="font-mono text-sm font-semibold text-[#00E5FF]">¢</span>
           </div>
-          <p className="mt-2 font-mono text-[11px] text-gray-400 uppercase tracking-wider">
-            OPERADOR: <strong className="text-white">{operatorCallsign}</strong>
+          <p className="mt-2.5 font-mono text-[11px] text-[#64748B] uppercase tracking-[0.14em]">
+              OPERADOR: <strong className="text-[#F1F5F9]">{operatorCallsign}</strong>
           </p>
         </motion.div>
 
@@ -240,61 +260,67 @@ export function MyContracts() {
           key={`rep-${reputation}`}
           initial={{ scale: 0.99 }}
           animate={{ scale: 1 }}
-          className="bg-dark-surface border border-neon-cyan/60 p-6 cyber-chamfer ah-reticle shadow-hud-cyan relative overflow-hidden"
+          className="bg-[#0C1017] border border-[#1E2636] p-6 ah-corner-marks relative overflow-hidden"
         >
-          <div className="h-1 w-full bg-neon-cyan absolute top-0 left-0" />
+          <div className="h-[1px] w-full bg-[#00E5FF]/60 absolute top-0 left-0" />
           <div className="flex items-center justify-between">
-            <span className="font-mono text-xs text-gray-400 uppercase tracking-widest">
-              // Índice de Reputação
+            <span className="font-mono text-[11px] text-[#64748B] uppercase tracking-[0.16em]">
+              ÍNDICE DE REPUTAÇÃO
             </span>
-            <div className="w-9 h-9 bg-neon-cyan/10 border border-neon-cyan flex items-center justify-center">
-              <Award className="w-4 h-4 text-neon-cyan" />
+            <div className="w-8 h-8 bg-[#111722] border border-[#1E2636] flex items-center justify-center">
+              <Award className="w-4 h-4 text-[#00E5FF]" />
             </div>
           </div>
 
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="font-mono text-xs uppercase text-neon-cyan">NÍVEL</span>
-            <span className="font-mono text-3xl md:text-4xl font-bold text-white">
+            <span className="font-mono text-[11px] uppercase text-[#00E5FF] tracking-[0.14em]">
+              REP
+            </span>
+            <span className="font-display text-3xl font-bold text-[#F1F5F9]">
               {reputation}
             </span>
-            <span className="font-mono text-xs text-neon-green ml-2">+10 / OPERAÇÃO</span>
+            <span className="font-mono text-[11px] text-[#10B981] ml-2">+10 / MISSÃO</span>
           </div>
-          <p className="mt-2 font-mono text-[11px] text-gray-400 uppercase tracking-wider">
+          <p className="mt-2.5 font-mono text-[11px] text-[#64748B] uppercase tracking-[0.14em]">
             CREDENCIAL:{' '}
-            <strong className="text-neon-cyan">
-              {reputation >= 30 ? 'OPERADOR SÊNIOR // NÍVEL ALFA' : 'OPERADOR INDEPENDENTE'}
+            <strong className="text-[#00E5FF]">
+              {reputation >= 50 ? 'OPERADOR SÊNIOR // NÍVEL ALFA' : 'OPERADOR VERIFICADO'}
             </strong>
           </p>
         </motion.div>
 
         {/* Card 3: Telemetria Operacional */}
-        <div className="bg-dark-surface border border-dark-border p-6 cyber-chamfer ah-reticle relative overflow-hidden">
-          <div className="h-1 w-full bg-neon-green absolute top-0 left-0" />
+        <div className="bg-[#0C1017] border border-[#1E2636] p-6 ah-corner-marks relative overflow-hidden">
+          <div className="h-[1px] w-full bg-[#10B981]/60 absolute top-0 left-0" />
           <div className="flex items-center justify-between">
-            <span className="font-mono text-xs text-gray-400 uppercase tracking-widest">
-              // Resumo Operacional
+            <span className="font-mono text-[11px] text-[#64748B] uppercase tracking-[0.16em]">
+              TELEMETRIA DE MISSÕES
             </span>
-            <div className="w-9 h-9 bg-neon-green/10 border border-neon-green flex items-center justify-center">
-              <Briefcase className="w-4 h-4 text-neon-green" />
+            <div className="w-8 h-8 bg-[#111722] border border-[#1E2636] flex items-center justify-center">
+              <Briefcase className="w-4 h-4 text-[#10B981]" />
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-4 pt-1">
+          <div className="mt-4 grid grid-cols-2 gap-4 pt-0.5">
             <div>
-              <span className="block font-mono text-[10px] text-gray-400 uppercase">EM EXECUÇÃO</span>
-              <span className="font-mono text-2xl font-bold text-edgerunner-yellow">
+              <span className="block font-mono text-[10px] text-[#64748B] uppercase tracking-[0.14em]">
+                EM EXECUÇÃO
+              </span>
+              <span className="font-display text-2xl font-bold text-[#00E5FF]">
                 {activeCount}
               </span>
             </div>
-            <div className="border-l border-dark-border pl-4">
-              <span className="block font-mono text-[10px] text-gray-400 uppercase">CONCLUÍDAS</span>
-              <span className="font-mono text-2xl font-bold text-neon-green">
+            <div className="border-l border-[#1E2636] pl-4">
+              <span className="block font-mono text-[10px] text-[#64748B] uppercase tracking-[0.14em]">
+                CONCLUÍDAS
+              </span>
+              <span className="font-display text-2xl font-bold text-[#10B981]">
                 {completedCount}
               </span>
             </div>
           </div>
-          <p className="mt-2 font-mono text-[11px] text-gray-400 uppercase tracking-wider">
-            HISTÓRICO TOTAL: <strong className="text-white">{contracts.length}</strong>
+          <p className="mt-2.5 font-mono text-[11px] text-[#64748B] uppercase tracking-[0.14em]">
+            REGISTROS VINCULADOS: <strong className="text-[#F1F5F9]">{contracts.length}</strong>
           </p>
         </div>
       </div>
@@ -305,29 +331,29 @@ export function MyContracts() {
       <AnimatePresence>
         {feedback && (
           <motion.div
-            initial={{ opacity: 0, y: -12 }}
+            initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            className={`p-4 border font-mono text-xs md:text-sm uppercase tracking-wider flex items-center justify-between gap-3 ${
+            exit={{ opacity: 0, y: -10 }}
+            className={`p-4 border font-mono text-xs uppercase tracking-[0.14em] flex items-center justify-between gap-3 ${
               feedback.type === 'success'
-                ? 'bg-neon-green/15 border-neon-green text-neon-green shadow-hud-emerald'
-                : 'bg-neon-pink/15 border-neon-pink text-neon-pink shadow-hud-pink'
+                ? 'bg-[#10B981]/10 border-[#10B981]/60 text-[#10B981]'
+                : 'bg-[#F43F5E]/10 border-[#F43F5E]/60 text-[#F43F5E]'
             }`}
           >
             <div className="flex items-center gap-3">
               {feedback.type === 'success' ? (
-                <CheckCircle2 className="w-5 h-5 shrink-0" />
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
               ) : (
-                <XCircle className="w-5 h-5 shrink-0" />
+                <XCircle className="w-4 h-4 shrink-0" />
               )}
-              <span className="font-bold">{feedback.message}</span>
+              <span className="font-medium">{feedback.message}</span>
             </div>
             <button
               type="button"
               onClick={() => setFeedback(null)}
-              className="text-xs underline opacity-75 hover:opacity-100 cursor-pointer"
+              className="text-[11px] underline opacity-75 hover:opacity-100 cursor-pointer"
             >
-              [FECHAR]
+              FECHAR
             </button>
           </motion.div>
         )}
@@ -336,16 +362,21 @@ export function MyContracts() {
       {/* =========================================================
           CABEÇALHO E FILTROS DAS OPERAÇÕES DO OPERADOR
          ========================================================= */}
-      <div className="border border-dark-border bg-dark-surface/90 p-6 cyber-chamfer ah-reticle">
+      <div className="border border-[#1E2636] bg-[#0C1017] p-6 md:p-8 ah-corner-marks relative overflow-hidden">
+        <div className="h-[1px] w-full bg-[#00E5FF]/50 absolute top-0 left-0" />
+
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <span className="font-mono text-xs text-neon-cyan uppercase tracking-widest flex items-center gap-1.5">
+            <span className="font-mono text-[11px] text-[#00E5FF] uppercase tracking-[0.18em] flex items-center gap-2 mb-1.5">
               <Terminal className="w-3.5 h-3.5" />
-              // REGISTRO DE OPERAÇÕES E HISTÓRICO
+              ACTIVE OPERATIONS // OPS_02
             </span>
-            <h1 className="cyber-glitch font-display font-bold text-3xl tracking-wider uppercase text-white mt-1">
-              Minhas <span className="text-neon-cyan">Operações</span>
+            <h1 className="font-display font-bold text-2xl md:text-3xl tracking-tight text-[#F1F5F9]">
+              Minhas Operações
             </h1>
+            <p className="font-sans text-sm text-[#94A3B8] mt-1">
+              Acompanhamento de contratos aceitos, submissão de resultados e histórico operacional.
+            </p>
           </div>
 
           <button
@@ -355,15 +386,18 @@ export function MyContracts() {
               fetchMyContracts();
             }}
             disabled={isLoading}
-            className="self-start md:self-auto px-4 py-2.5 bg-dark-card border border-dark-border hover:border-neon-cyan text-gray-300 hover:text-neon-cyan font-mono text-xs uppercase tracking-widest transition-all flex items-center gap-2 cursor-pointer"
+            className="self-start md:self-auto px-4 py-2.5 bg-[#111722] border border-[#1E2636] hover:border-[#00E5FF]/60 text-[#F1F5F9] font-mono text-[11px] uppercase tracking-[0.16em] transition-colors flex items-center gap-2 cursor-pointer"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-neon-cyan' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-[#00E5FF]' : 'text-[#94A3B8]'}`} />
             <span>SINCRONIZAR REGISTRO</span>
           </button>
         </div>
 
         {/* Filtros por Estado da Operação */}
-        <div className="mt-6 pt-4 border-t border-dark-border flex flex-wrap items-center gap-2">
+        <div className="mt-6 pt-5 border-t border-[#1E2636] flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[10px] text-[#64748B] uppercase tracking-[0.16em] mr-2">
+            ESTADO:
+          </span>
           {(['ALL', 'ACCEPTED', 'COMPLETED', 'FAILED'] as const).map((status) => {
             const isSelected = statusFilter === status;
             return (
@@ -374,10 +408,10 @@ export function MyContracts() {
                   soundEngine.playClick();
                   setStatusFilter(status);
                 }}
-                className={`px-3 py-1 font-mono text-xs uppercase tracking-widest border transition-all cursor-pointer ${
+                className={`px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em] border transition-colors cursor-pointer ${
                   isSelected
-                    ? 'bg-neon-cyan text-dark-bg border-neon-cyan font-bold shadow-hud-cyan'
-                    : 'bg-dark-card border-dark-border text-gray-400 hover:border-neon-cyan hover:text-neon-cyan'
+                    ? 'bg-[#00E5FF]/15 text-[#00E5FF] border-[#00E5FF] font-semibold'
+                    : 'bg-[#111722] border-[#1E2636] text-[#94A3B8] hover:border-[#00E5FF]/40 hover:text-[#F1F5F9]'
                 }`}
               >
                 {STATUS_FILTER_LABELS[status]}
@@ -388,10 +422,10 @@ export function MyContracts() {
       </div>
 
       {isOfflineDemo && (
-        <div className="p-3.5 bg-neon-cyan/10 border border-neon-cyan/50 text-neon-cyan flex items-center gap-2.5 font-mono text-xs">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
+        <div className="p-3.5 bg-[#111722] border border-[#1E2636] text-[#94A3B8] flex items-center gap-2.5 font-mono text-[11px]">
+          <AlertTriangle className="w-4 h-4 text-[#00E5FF] shrink-0" />
           <span>
-            MODO DE SIMULAÇÃO LOCAL: Operações vinculadas no Catálogo e resultados submetidos aqui permanecem sincronizados na sua sessão.
+            MODO TERMINAL LOCAL: Operações vinculadas no Catálogo e resultados submetidos aqui atualizam sua carteira e reputação em tempo real.
           </span>
         </div>
       )}
@@ -404,17 +438,17 @@ export function MyContracts() {
           {[1, 2, 3].map((skeleton) => (
             <div
               key={skeleton}
-              className="h-64 bg-dark-surface border border-dark-border p-6 animate-pulse"
+              className="h-64 bg-[#0C1017] border border-[#1E2636] p-6 animate-pulse"
             />
           ))}
         </div>
       ) : filteredContracts.length === 0 ? (
-        <div className="border border-dark-border bg-dark-surface/70 p-12 text-center cyber-chamfer">
-          <Briefcase className="w-10 h-10 text-gray-500 mx-auto mb-3" />
-          <h2 className="font-display font-bold text-2xl text-white uppercase tracking-wider">
-            Nenhuma Operação Registrada
+        <div className="border border-[#1E2636] bg-[#0C1017] p-12 text-center ah-corner-marks">
+          <Briefcase className="w-8 h-8 text-[#64748B] mx-auto mb-3" />
+          <h2 className="font-display font-bold text-xl text-[#F1F5F9]">
+            Nenhuma operação registrada
           </h2>
-          <p className="font-mono text-xs text-gray-400 mt-1 uppercase tracking-widest">
+          <p className="font-mono text-xs text-[#64748B] mt-1 uppercase tracking-[0.14em]">
             Acesse o Catálogo de Contratos para avaliar oportunidades e vincular uma nova operação.
           </p>
         </div>
@@ -425,7 +459,7 @@ export function MyContracts() {
               <motion.div
                 key={contract.id}
                 layout
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.96 }}
               >

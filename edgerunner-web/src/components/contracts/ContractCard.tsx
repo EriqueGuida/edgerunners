@@ -5,6 +5,7 @@ import {
   Skull,
   CheckCircle2,
   XCircle,
+  MapPin,
 } from 'lucide-react';
 import { HoldToAcceptButton } from '../ui/HoldToAcceptButton';
 import type { Contract, ThreatLevel } from '../../types/contract';
@@ -25,36 +26,31 @@ const threatStyles: Record<
     cardBorder: string;
     topBar: string;
     badge: string;
-    hoverGlow: string;
     label: string;
   }
 > = {
   LOW: {
-    cardBorder: 'border-dark-border hover:border-neon-green/80',
-    topBar: 'bg-neon-green',
-    badge: 'bg-neon-green/10 border-neon-green/60 text-neon-green',
-    hoverGlow: 'hover:shadow-hud-emerald',
+    cardBorder: 'border-[#1E2636] hover:border-[#10B981]/60',
+    topBar: 'bg-[#10B981]',
+    badge: 'bg-[#10B981]/10 border-[#10B981]/40 text-[#10B981]',
     label: 'RISCO // BAIXO',
   },
   MEDIUM: {
-    cardBorder: 'border-dark-border hover:border-neon-cyan/80',
-    topBar: 'bg-neon-cyan',
-    badge: 'bg-neon-cyan/10 border-neon-cyan/60 text-neon-cyan',
-    hoverGlow: 'hover:shadow-hud-cyan',
+    cardBorder: 'border-[#1E2636] hover:border-[#00E5FF]/60',
+    topBar: 'bg-[#00E5FF]',
+    badge: 'bg-[#00E5FF]/10 border-[#00E5FF]/40 text-[#00E5FF]',
     label: 'RISCO // MÉDIO',
   },
   HIGH: {
-    cardBorder: 'border-edgerunner-yellow/35 hover:border-edgerunner-yellow',
-    topBar: 'bg-edgerunner-yellow',
-    badge: 'bg-edgerunner-yellow/10 border-edgerunner-yellow/70 text-edgerunner-yellow',
-    hoverGlow: 'hover:shadow-hud-yellow',
+    cardBorder: 'border-[#1E2636] hover:border-[#F59E0B]/60',
+    topBar: 'bg-[#F59E0B]',
+    badge: 'bg-[#F59E0B]/10 border-[#F59E0B]/40 text-[#F59E0B]',
     label: 'RISCO // ALTO',
   },
   PSYCHO: {
-    cardBorder: 'border-neon-pink/60 hover:border-neon-pink',
-    topBar: 'bg-neon-pink',
-    badge: 'bg-neon-pink/15 border-neon-pink text-neon-pink',
-    hoverGlow: 'hover:shadow-hud-pink',
+    cardBorder: 'border-[#F43F5E]/40 hover:border-[#F43F5E]',
+    topBar: 'bg-[#F43F5E]',
+    badge: 'bg-[#F43F5E]/10 border-[#F43F5E]/50 text-[#F43F5E]',
     label: 'RISCO // CRÍTICO',
   },
 };
@@ -78,73 +74,91 @@ export function ContractCard({
   return (
     <article
       onMouseEnter={() => soundEngine.playHover()}
-      className={`group relative flex flex-col justify-between bg-dark-surface border ${style.cardBorder} ${style.hoverGlow} cyber-chamfer ah-reticle transition-all duration-200 ease-out hover:-translate-y-1 overflow-hidden`}
+      className={`group relative flex flex-col justify-between bg-[#0C1017] border ${style.cardBorder} ah-corner-marks transition-all duration-200 ease-out hover:-translate-y-0.5 overflow-hidden`}
     >
-      {/* Indicador superior de classificação de risco */}
-      <div className={`h-1 w-full ${style.topBar}`} />
+      {/* Indicador superior discreto de classificação de risco */}
+      <div className={`h-[2px] w-full ${style.topBar}`} />
 
       {/* Corpo do Card */}
       <div className="p-6 flex-1 flex flex-col justify-between space-y-5">
         {/* Topo: Identificador Único + Classificação de Risco */}
         <div>
           <div className="flex items-center justify-between gap-2 mb-3">
-            <span className="font-mono text-xs text-gray-400 tracking-widest uppercase">
-              CTR #{String(contract.id).padStart(4, '0')}
+            <span className="font-mono text-[11px] text-[#00E5FF] tracking-[0.16em] uppercase">
+              CTR-{String(contract.id).padStart(4, '0')}
             </span>
 
             <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 border font-mono text-[11px] tracking-widest uppercase ${style.badge}`}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 border font-mono text-[10px] tracking-[0.14em] uppercase ${style.badge}`}
             >
               {isPsycho ? (
-                <Skull className="w-3.5 h-3.5" />
+                <Skull className="w-3 h-3" />
               ) : (
-                <ShieldAlert className="w-3.5 h-3.5" />
+                <ShieldAlert className="w-3 h-3" />
               )}
               {style.label}
             </span>
           </div>
 
           {/* Título do Contrato */}
-          <h3 className="font-display font-bold text-xl text-white tracking-wide uppercase group-hover:text-edgerunner-yellow transition-colors line-clamp-2">
+          <h3 className="font-display font-bold text-lg text-[#F1F5F9] tracking-tight group-hover:text-[#00E5FF] transition-colors line-clamp-2">
             {contract.title}
           </h3>
+
+          {contract.summary && (
+            <p className="mt-2 font-sans text-xs text-[#94A3B8] leading-relaxed line-clamp-2">
+              {contract.summary}
+            </p>
+          )}
         </div>
 
-        {/* Metadados Operacionais (Alvo e Organização/Facção) */}
-        <div className="space-y-2.5 py-3.5 px-4 bg-dark-card/90 border border-dark-border">
-          <div className="flex items-center justify-between font-mono text-xs">
-            <span className="flex items-center gap-2 text-gray-400 uppercase">
-              <Crosshair className="w-3.5 h-3.5 text-neon-pink" />
-              Alvo / Objetivo:
+        {/* Metadados Operacionais (Alvo, Organização e Localização) */}
+        <div className="space-y-2 py-3 px-3.5 bg-[#111722] border border-[#1E2636]">
+          <div className="flex items-center justify-between font-mono text-[11px]">
+            <span className="flex items-center gap-2 text-[#64748B] uppercase tracking-[0.1em]">
+              <Crosshair className="w-3.5 h-3.5 text-[#00E5FF]" />
+              Alvo:
             </span>
-            <span className="text-white font-semibold tracking-wider uppercase truncate max-w-[58%]">
+            <span className="text-[#F1F5F9] font-medium tracking-wide truncate max-w-[62%]">
               {contract.targetName}
             </span>
           </div>
 
-          <div className="flex items-center justify-between font-mono text-xs border-t border-dark-border/60 pt-2">
-            <span className="flex items-center gap-2 text-gray-400 uppercase">
-              <Building2 className="w-3.5 h-3.5 text-neon-cyan" />
-              Organização:
+          <div className="flex items-center justify-between font-mono text-[11px] border-t border-[#1E2636] pt-2">
+            <span className="flex items-center gap-2 text-[#64748B] uppercase tracking-[0.1em]">
+              <Building2 className="w-3.5 h-3.5 text-[#94A3B8]" />
+              Contratante:
             </span>
-            <span className="text-neon-cyan tracking-wider uppercase truncate max-w-[58%]">
+            <span className="text-[#94A3B8] tracking-wide truncate max-w-[62%]">
               {contract.faction}
             </span>
           </div>
+
+          {contract.locationName && (
+            <div className="flex items-center justify-between font-mono text-[11px] border-t border-[#1E2636] pt-2">
+              <span className="flex items-center gap-2 text-[#64748B] uppercase tracking-[0.1em]">
+                <MapPin className="w-3.5 h-3.5 text-[#00E5FF]" />
+                Setor:
+              </span>
+              <span className="text-[#00E5FF] tracking-wide truncate max-w-[62%]">
+                {contract.locationName}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Rodapé: Recompensa em Créditos Fictícios + Ações */}
-        <div className="pt-3 border-t border-dark-border flex flex-wrap items-end justify-between gap-4">
+        <div className="pt-3.5 border-t border-[#1E2636] flex flex-wrap items-end justify-between gap-4">
           <div>
-            <span className="block font-mono text-[10px] text-gray-400 uppercase tracking-widest">
+            <span className="block font-mono text-[10px] text-[#64748B] uppercase tracking-[0.14em]">
               Recompensa Estimada
             </span>
-            <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="font-mono text-xs font-bold text-neon-green uppercase">
-                CR¢
-              </span>
-              <span className="font-mono text-2xl font-bold text-edgerunner-yellow tracking-tight">
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="font-display text-2xl font-bold text-[#F1F5F9] tracking-tight">
                 {formattedReward}
+              </span>
+              <span className="font-mono text-xs font-semibold text-[#00E5FF]">
+                ¢
               </span>
             </div>
           </div>
@@ -169,7 +183,7 @@ export function ContractCard({
                     soundEngine.playClick();
                     onComplete(contract.id);
                   }}
-                  className="px-3.5 py-2 bg-neon-green/10 border border-neon-green text-neon-green hover:bg-neon-green hover:text-dark-bg hover:shadow-hud-emerald font-mono text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-3.5 py-2 bg-[#10B981]/10 border border-[#10B981]/60 text-[#10B981] hover:bg-[#10B981] hover:text-[#07090E] font-mono text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>CONCLUIR</span>
@@ -184,7 +198,7 @@ export function ContractCard({
                     soundEngine.playClick();
                     onFail(contract.id);
                   }}
-                  className="px-3.5 py-2 bg-neon-pink/10 border border-neon-pink text-neon-pink hover:bg-neon-pink hover:text-dark-bg hover:shadow-hud-pink font-mono text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-3.5 py-2 bg-[#F43F5E]/10 border border-[#F43F5E]/60 text-[#F43F5E] hover:bg-[#F43F5E] hover:text-[#07090E] font-mono text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <XCircle className="w-3.5 h-3.5" />
                   <span>FALHAR</span>
@@ -195,15 +209,15 @@ export function ContractCard({
 
           {/* 3. Estados Finais Persistidos */}
           {contract.status === 'COMPLETED' && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neon-green/10 border border-neon-green font-mono text-xs font-bold text-neon-green uppercase tracking-widest">
-              <CheckCircle2 className="w-4 h-4" />
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#10B981]/10 border border-[#10B981]/50 font-mono text-[11px] font-semibold text-[#10B981] uppercase tracking-[0.14em]">
+              <CheckCircle2 className="w-3.5 h-3.5" />
               CONCLUÍDO
             </span>
           )}
 
           {contract.status === 'FAILED' && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neon-pink/10 border border-neon-pink font-mono text-xs font-bold text-neon-pink uppercase tracking-widest">
-              <XCircle className="w-4 h-4" />
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F43F5E]/10 border border-[#F43F5E]/50 font-mono text-[11px] font-semibold text-[#F43F5E] uppercase tracking-[0.14em]">
+              <XCircle className="w-3.5 h-3.5" />
               FALHOU
             </span>
           )}
