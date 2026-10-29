@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { ContractCard } from '../components/contracts/ContractCard';
+import { DEMO_MY_CONTRACTS_KEY } from './MyContracts';
 import type { Contract, ThreatLevel } from '../types/contract';
 
 // Contratos de demonstração caso o usuário esteja em DEV_MODE sem o MySQL ligado
@@ -107,9 +108,19 @@ export function Market() {
 
   const handleAcceptContract = async (id: number) => {
     setAcceptingId(id);
+    const acceptedContract = contracts.find((c) => c.id === id);
+
     try {
       if (!isOfflineDemo) {
         await api.patch(`/api/contracts/${id}/accept`);
+      } else if (acceptedContract) {
+        const saved = localStorage.getItem(DEMO_MY_CONTRACTS_KEY);
+        const currentMyContracts: Contract[] = saved ? JSON.parse(saved) : [];
+        const updatedMyContracts: Contract[] = [
+          { ...acceptedContract, status: 'ACCEPTED' },
+          ...currentMyContracts.filter((c) => c.id !== id),
+        ];
+        localStorage.setItem(DEMO_MY_CONTRACTS_KEY, JSON.stringify(updatedMyContracts));
       }
       // Remove o contrato aceito da lista de disponíveis
       setContracts((prev) => prev.filter((c) => c.id !== id));

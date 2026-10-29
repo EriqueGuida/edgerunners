@@ -4,29 +4,7 @@ import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Market } from './pages/Market';
-
-function MyContractsPlaceholder() {
-  return (
-    <div className="border border-dark-border bg-dark-surface/90 p-6 cyber-chamfer">
-      <div className="flex items-center justify-between border-b border-dark-border pb-4 mb-4">
-        <div>
-          <span className="font-mono text-xs text-neon-cyan uppercase tracking-widest">
-            // HUNTER LOG
-          </span>
-          <h1 className="text-3xl font-bold tracking-wider uppercase text-white">
-            My <span className="text-neon-cyan">Contracts</span>
-          </h1>
-        </div>
-        <span className="px-3 py-1 border border-neon-cyan/50 bg-neon-cyan/10 font-mono text-xs text-neon-cyan uppercase">
-          ACTIVE GIGS
-        </span>
-      </div>
-      <p className="font-mono text-sm text-gray-400">
-        Seus contratos aceitos e histórico de missões aparecerão aqui.
-      </p>
-    </div>
-  );
-}
+import { MyContracts } from './pages/MyContracts';
 
 export function App() {
   return (
@@ -41,7 +19,7 @@ export function App() {
           <Route element={<MainLayout />}>
             <Route path="/" element={<Navigate to="/market" replace />} />
             <Route path="/market" element={<Market />} />
-            <Route path="/my-contracts" element={<MyContractsPlaceholder />} />
+            <Route path="/my-contracts" element={<MyContracts />} />
           </Route>
         </Route>
 

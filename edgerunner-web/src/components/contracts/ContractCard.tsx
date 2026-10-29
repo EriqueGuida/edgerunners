@@ -4,6 +4,7 @@ import {
   Building2,
   Skull,
   CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { HoldToAcceptButton } from '../ui/HoldToAcceptButton';
 import type { Contract, ThreatLevel } from '../../types/contract';
@@ -11,7 +12,10 @@ import type { Contract, ThreatLevel } from '../../types/contract';
 interface ContractCardProps {
   contract: Contract;
   onAccept?: (id: number) => void;
+  onComplete?: (id: number) => void;
+  onFail?: (id: number) => void;
   isAccepting?: boolean;
+  isProcessing?: boolean;
 }
 
 const threatStyles: Record<
@@ -54,7 +58,14 @@ const threatStyles: Record<
   },
 };
 
-export function ContractCard({ contract, onAccept, isAccepting = false }: ContractCardProps) {
+export function ContractCard({
+  contract,
+  onAccept,
+  onComplete,
+  onFail,
+  isAccepting = false,
+  isProcessing = false,
+}: ContractCardProps) {
   const style = threatStyles[contract.threatLevel] || threatStyles.MEDIUM;
   const isPsycho = contract.threatLevel === 'PSYCHO';
 
@@ -120,8 +131,8 @@ export function ContractCard({ contract, onAccept, isAccepting = false }: Contra
           </div>
         </div>
 
-        {/* Rodapé: Recompensa em Eddies + Botão HoldToAccept */}
-        <div className="pt-2 border-t border-dark-border flex items-end justify-between gap-4">
+        {/* Rodapé: Recompensa em Eddies + Ações Contextuais */}
+        <div className="pt-3 border-t border-dark-border flex flex-wrap items-end justify-between gap-4">
           <div>
             <span className="block font-mono text-[10px] text-gray-400 uppercase tracking-widest">
               Bounty Reward
@@ -134,6 +145,7 @@ export function ContractCard({ contract, onAccept, isAccepting = false }: Contra
             </div>
           </div>
 
+          {/* 1. Ação no Market (AVAILABLE): Segurar por 2s para aceitar */}
           {onAccept && contract.status === 'AVAILABLE' && (
             <HoldToAcceptButton
               onAccept={() => onAccept(contract.id)}
@@ -142,10 +154,47 @@ export function ContractCard({ contract, onAccept, isAccepting = false }: Contra
             />
           )}
 
-          {contract.status !== 'AVAILABLE' && (
-            <span className="inline-flex items-center gap-1 font-mono text-xs text-neon-cyan uppercase tracking-widest">
+          {/* 2. Ações em MyContracts (ACCEPTED): Botões COMPLETE e FAIL */}
+          {contract.status === 'ACCEPTED' && (onComplete || onFail) && (
+            <div className="flex items-center gap-2">
+              {onComplete && (
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => onComplete(contract.id)}
+                  className="px-3.5 py-2 bg-neon-green/10 border border-neon-green text-neon-green hover:bg-neon-green hover:text-dark-bg hover:shadow-[0_0_15px_rgba(0,255,102,0.5)] font-mono text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>COMPLETE</span>
+                </button>
+              )}
+
+              {onFail && (
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => onFail(contract.id)}
+                  className="px-3.5 py-2 bg-neon-pink/10 border border-neon-pink text-neon-pink hover:bg-neon-pink hover:text-dark-bg hover:shadow-hud-pink font-mono text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>FAIL</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* 3. Badges de Status Finalizado (COMPLETED / FAILED) */}
+          {contract.status === 'COMPLETED' && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neon-green/10 border border-neon-green font-mono text-xs font-bold text-neon-green uppercase tracking-widest">
               <CheckCircle2 className="w-4 h-4" />
-              {contract.status}
+              COMPLETED
+            </span>
+          )}
+
+          {contract.status === 'FAILED' && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neon-pink/10 border border-neon-pink font-mono text-xs font-bold text-neon-pink uppercase tracking-widest">
+              <XCircle className="w-4 h-4" />
+              FAILED
             </span>
           )}
         </div>
