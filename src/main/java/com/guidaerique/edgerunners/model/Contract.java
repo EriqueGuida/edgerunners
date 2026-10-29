@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 
 /**
  * Entidade que representa um Contrato operacional no sistema AFTERHOURS (Seção 15.3).
- * Suporta briefing narrativo completo, requisitos, coordenadas geográficas reais (WGS84) e controle de concorrência.
+ * Suporta briefing narrativo completo, requisitos e coordenadas geográficas reais (WGS84).
  */
 @Entity
 @Table(name = "contracts")
@@ -61,12 +61,10 @@ public class Contract {
 
     /** Reputação mínima recomendada/exigida para aceitar o contrato. */
     @Builder.Default
-    @Column(nullable = false)
     private Integer minReputation = 1;
 
     /** Ganho de reputação determinístico ao concluir a operação com sucesso. */
     @Builder.Default
-    @Column(nullable = false)
     private Integer reputationReward = 10;
 
     /** Localização legível (Ex: "Shinjuku, Tóquio — Japão"). */
@@ -93,9 +91,13 @@ public class Contract {
     private Hunter hunter;
 
     @Builder.Default
-    @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    @Version
-    private Long version;
+    @PrePersist
+    public void ensureDefaults() {
+        if (this.status == null) this.status = ContractStatus.AVAILABLE;
+        if (this.minReputation == null) this.minReputation = 1;
+        if (this.reputationReward == null) this.reputationReward = 10;
+        if (this.createdAt == null) this.createdAt = LocalDateTime.now();
+    }
 }

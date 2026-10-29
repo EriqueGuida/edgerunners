@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 /**
  * Entidade que representa um Operador ou Administrador registrado no sistema AFTERHOURS (Seção 15.1 e 15.2).
- * Mantém os atributos streetCred e eddies sincronizados com reputation e balance para compatibilidade total.
+ * Mantém compatibilidade com esquemas MySQL pré-existentes.
  */
 @Entity
 @Table(name = "hunters")
@@ -33,7 +33,7 @@ public class Hunter {
     /** Papel de autorização do usuário (OPERATOR ou ADMIN - RF-014). */
     @Builder.Default
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 25)
+    @Column(length = 25)
     private Role role = Role.OPERATOR;
 
     /** Codinome público de apresentação no perfil (RF-021). */
@@ -66,19 +66,32 @@ public class Hunter {
     private Double eddies = 0.0;
 
     @Builder.Default
-    @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    @Version
-    private Long version;
+    @PrePersist
+    public void ensureDefaults() {
+        if (this.role == null) this.role = Role.OPERATOR;
+        if (this.streetCred == null) this.streetCred = 1;
+        if (this.eddies == null) this.eddies = 0.0;
+        if (this.createdAt == null) this.createdAt = LocalDateTime.now();
+        if (this.callsign == null || this.callsign.isBlank()) {
+            this.callsign = "OP_" + (this.username != null ? this.username.toUpperCase() : "AGENT");
+        }
+        if (this.specialization == null || this.specialization.isBlank()) {
+            this.specialization = "INFILTRAÇÃO & EXTRAÇÃO DE DADOS";
+        }
+        if (this.avatarCode == null || this.avatarCode.isBlank()) {
+            this.avatarCode = "VANGUARD_01";
+        }
+    }
 
     /** Alias semântico AFTERHOURS para reputação. */
     public Integer getReputation() {
-        return this.streetCred;
+        return this.streetCred != null ? this.streetCred : 1;
     }
 
     /** Alias semântico AFTERHOURS para saldo da carteira fictícia. */
     public Double getBalance() {
-        return this.eddies;
+        return this.eddies != null ? this.eddies : 0.0;
     }
 }

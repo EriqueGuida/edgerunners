@@ -14,7 +14,7 @@ export const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem(TOKEN_KEY);
-    if (token && config.headers) {
+    if (token && !token.startsWith('ah_local_jwt_') && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -22,12 +22,19 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Interceptor de Resposta: Se o token expirar (401/403 fora de /auth), limpa a sessão
+// Interceptor de Resposta: Se o token JWT do servidor expirar (401/403 fora de /auth), limpa a sessão
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const isLocalVaultToken = token?.startsWith('ah_local_jwt_');
     const isAuthEndpoint = error.config?.url?.includes('/auth/');
-    if (!isAuthEndpoint && (error.response?.status === 401 || error.response?.status === 403)) {
+
+    if (
+      !isLocalVaultToken &&
+      !isAuthEndpoint &&
+      (error.response?.status === 401 || error.response?.status === 403)
+    ) {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
       window.location.href = '/login';

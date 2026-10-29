@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Crosshair,
@@ -16,8 +16,9 @@ import {
   Eye,
   Layers,
   UserCheck,
+  Globe2,
 } from 'lucide-react';
-import { TOKEN_KEY, USER_KEY } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { useImmersion } from '../../context/ImmersionContext';
 import { soundEngine } from '../../utils/sound';
 
@@ -47,16 +48,18 @@ export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const { operator, isAdmin, logout } = useAuth();
   const { visualMode, soundEnabled, toggleVisualMode, toggleSound } = useImmersion();
 
-  const operatorCallsign = localStorage.getItem(USER_KEY) || 'OP_VANGUARD';
+  const operatorCallsign = operator?.callsign || operator?.username || 'OP_VANGUARD';
+  const operatorBalance = operator?.balance ?? operator?.eddies ?? 0;
+  const operatorRep = operator?.reputation ?? operator?.streetCred ?? 1;
 
   const handleLogout = () => {
     soundEngine.playClick();
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    logout();
     setIsMobileMenuOpen(false);
-    navigate('/login');
+    navigate('/');
   };
 
   return (
@@ -70,14 +73,18 @@ export function Sidebar() {
         transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
         className="hidden md:flex flex-col h-screen bg-dark-surface border-r border-dark-border relative select-none z-30 shrink-0"
       >
-        {/* Linha superior de assinatura visual AFTERHOURS */}
         <div className="h-[2px] w-full bg-gradient-to-r from-edgerunner-yellow via-neon-cyan to-transparent" />
 
         {/* HEADER / IDENTIDADE DO TERMINAL */}
         <div className="h-20 px-5 flex items-center justify-between border-b border-dark-border">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-10 h-10 shrink-0 bg-edgerunner-yellow/10 border border-edgerunner-yellow flex items-center justify-center shadow-hud-yellow">
-              <Terminal className="w-5 h-5 text-edgerunner-yellow" />
+          <Link
+            to="/"
+            onClick={() => soundEngine.playClick()}
+            className="flex items-center gap-3 overflow-hidden group"
+            title="Ir para a apresentação pública do AFTERHOURS"
+          >
+            <div className="w-10 h-10 shrink-0 bg-edgerunner-yellow/10 border border-edgerunner-yellow flex items-center justify-center shadow-hud-yellow group-hover:bg-edgerunner-yellow group-hover:text-dark-bg transition-colors">
+              <Terminal className="w-5 h-5 text-edgerunner-yellow group-hover:text-dark-bg transition-colors" />
             </div>
 
             <AnimatePresence mode="wait">
@@ -101,7 +108,7 @@ export function Sidebar() {
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
+          </Link>
         </div>
 
         {/* BOTÃO DE EXPANDIR / RECOLHER */}
@@ -121,7 +128,7 @@ export function Sidebar() {
           )}
         </button>
 
-        {/* IDENTIFICAÇÃO DO OPERADOR AUTENTICADO */}
+        {/* IDENTIFICAÇÃO E SALDO DO OPERADOR AUTENTICADO */}
         <div className="px-5 py-4 border-b border-dark-border/60 bg-dark-card/30">
           <div className="flex items-center gap-2.5 overflow-hidden">
             <span
@@ -135,15 +142,26 @@ export function Sidebar() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="truncate"
+                  className="truncate flex-1"
                 >
-                  <span className="block font-mono text-[10px] text-gray-400 tracking-widest uppercase">
-                    OPERADOR ATIVO
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] text-gray-400 tracking-widest uppercase">
+                      {isAdmin ? 'DIRETORIA ADMIN' : 'OPERADOR ATIVO'}
+                    </span>
+                    <span className="font-mono text-[10px] text-neon-cyan uppercase">
+                      REP {operatorRep}
+                    </span>
+                  </div>
                   <span className="font-mono text-xs font-bold text-white tracking-wider uppercase flex items-center gap-1.5 mt-0.5 truncate">
                     <UserCheck className="w-3.5 h-3.5 text-neon-cyan shrink-0" />
                     {operatorCallsign}
                   </span>
+                  <div className="mt-2 pt-2 border-t border-dark-border/60 flex items-center justify-between font-mono text-[11px]">
+                    <span className="text-gray-400">SALDO:</span>
+                    <strong className="text-edgerunner-yellow">
+                      CR¢ {new Intl.NumberFormat('pt-BR').format(operatorBalance)}
+                    </strong>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -212,8 +230,30 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* RODAPÉ / ENCERRAMENTO DE SESSÃO */}
-        <div className="p-3 border-t border-dark-border">
+        {/* RODAPÉ / VISÃO PÚBLICA & ENCERRAMENTO DE SESSÃO */}
+        <div className="p-3 border-t border-dark-border space-y-2">
+          <Link
+            to="/"
+            onClick={() => soundEngine.playClick()}
+            onMouseEnter={() => soundEngine.playHover()}
+            className="w-full group relative flex items-center gap-3.5 px-3.5 py-2.5 border border-transparent text-gray-400 hover:border-dark-border hover:text-neon-cyan transition-all duration-150"
+          >
+            <Globe2 className="w-4 h-4 shrink-0" />
+            <AnimatePresence mode="wait">
+              {!isCollapsed && (
+                <motion.span
+                  key="public-link"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="font-mono text-xs tracking-widest uppercase whitespace-nowrap"
+                >
+                  Apresentação Pública
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </Link>
+
           <button
             type="button"
             onClick={handleLogout}
@@ -250,7 +290,7 @@ export function Sidebar() {
           MOBILE HUD HEADER + DRAWER TÁTICO + BARRA INFERIOR
          ========================================================= */}
       <header className="md:hidden h-16 px-4 bg-dark-surface border-b border-dark-border flex items-center justify-between z-40 shrink-0">
-        <div className="flex items-center gap-2.5">
+        <Link to="/" className="flex items-center gap-2.5">
           <div className="w-8 h-8 bg-edgerunner-yellow/10 border border-edgerunner-yellow flex items-center justify-center">
             <Terminal className="w-4 h-4 text-edgerunner-yellow" />
           </div>
@@ -259,10 +299,10 @@ export function Sidebar() {
               AFTER<span className="text-edgerunner-yellow">HOURS</span>
             </span>
             <span className="block font-mono text-[9px] tracking-widest text-neon-cyan uppercase">
-              TERMINAL MÓVEL // {operatorCallsign}
+              {operatorCallsign} // CR¢ {new Intl.NumberFormat('pt-BR').format(operatorBalance)}
             </span>
           </div>
-        </div>
+        </Link>
 
         <button
           type="button"
@@ -277,7 +317,6 @@ export function Sidebar() {
         </button>
       </header>
 
-      {/* Drawer Tático Mobile */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div
@@ -292,7 +331,7 @@ export function Sidebar() {
                 <Shield className="w-4 h-4" />
                 Matriz de Navegação
               </span>
-              <span className="text-gray-400">{operatorCallsign}</span>
+              <span className="text-gray-400">REP {operatorRep}</span>
             </div>
 
             {navItems.map((item) => {
@@ -322,7 +361,6 @@ export function Sidebar() {
               );
             })}
 
-            {/* Preferências de Imersão no Mobile */}
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dark-border">
               <button
                 type="button"
@@ -376,7 +414,6 @@ export function Sidebar() {
         )}
       </AnimatePresence>
 
-      {/* Barra Inferior Mobile */}
       <nav
         aria-label="Navegação Rápida Mobile"
         className="md:hidden fixed bottom-0 inset-x-0 h-16 bg-dark-surface border-t border-dark-border grid grid-cols-3 z-40"

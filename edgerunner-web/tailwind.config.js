@@ -7,64 +7,62 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Fundos Obsidiana & Grafite Técnico (AFTERHOURS Dark Ops)
-        "dark-bg": "#08090C",
-        "dark-surface": "#0E1117",
-        "dark-card": "#141821",
-        "dark-border": "#212736",
+        // Paleta Nocturnal Operations Terminal (Seção 3.1)
+        "dark-bg": "#07090E",        // Preto azulado muito escuro
+        "dark-surface": "#0C1017",   // Grafite profundo (camada 1)
+        "dark-card": "#111722",      // Grafite profundo (camada 2)
+        "dark-border": "#1E2636",    // Cinza azulado de baixa intensidade
 
-        // Tokens Semânticos AFTERHOURS (compatíveis com classes legadas)
-        "edgerunner-yellow": "#F59E0B", // Âmbar Tático
-        "neon-cyan": "#22D3EE",         // Ciano Telemetria
-        "neon-pink": "#F43F5E",         // Carmesim Alerta Crítico
-        "neon-green": "#10B981",        // Esmeralda Operacional
-        "cyber-purple": "#8B5CF6",      // Violeta Criptográfico
-
-        // Aliases Explícitos do Design System AFTERHOURS
-        "ah-obsidian": "#08090C",
-        "ah-surface": "#0E1117",
-        "ah-panel": "#141821",
-        "ah-border": "#212736",
+        // Assinatura Primária: Ciano Elétrico | Secundária reservada: Carmesim/Magenta
+        "neon-cyan": "#00E5FF",
+        "neon-pink": "#F43F5E",
+        "neon-green": "#10B981",
+        "edgerunner-yellow": "#00E5FF", // Alinhado à assinatura primária ciano sem quebrar telas internas
         "ah-amber": "#F59E0B",
-        "ah-cyan": "#22D3EE",
+
+        // Tokens explícitos AFTERHOURS
+        "ah-bg": "#07090E",
+        "ah-surface": "#0C1017",
+        "ah-elevated": "#111722",
+        "ah-border": "#1E2636",
+        "ah-cyan": "#00E5FF",
         "ah-crimson": "#F43F5E",
         "ah-emerald": "#10B981",
+        "ah-text": "#E6EDF3",
+        "ah-muted": "#8B98A9",
       },
       fontFamily: {
-        display: ["'Rajdhani'", "sans-serif"],
-        mono: ["'Share Tech Mono'", "monospace"],
-        sans: ["'Inter'", "'Rajdhani'", "sans-serif"],
+        display: ["'Space Grotesk'", "'Rajdhani'", "sans-serif"],
+        sans: ["'IBM Plex Sans'", "'Inter'", "sans-serif"],
+        mono: ["'IBM Plex Mono'", "'Share Tech Mono'", "monospace"],
       },
       dropShadow: {
-        "neon-yellow": [
-          "0 0 8px rgba(245, 158, 11, 0.55)",
-          "0 0 18px rgba(245, 158, 11, 0.25)",
-        ],
         "neon-cyan": [
-          "0 0 8px rgba(34, 211, 238, 0.55)",
-          "0 0 18px rgba(34, 211, 238, 0.25)",
+          "0 0 10px rgba(0, 229, 255, 0.35)",
+        ],
+        "neon-yellow": [
+          "0 0 10px rgba(0, 229, 255, 0.35)",
         ],
         "neon-pink": [
-          "0 0 8px rgba(244, 63, 94, 0.55)",
-          "0 0 18px rgba(244, 63, 94, 0.25)",
+          "0 0 10px rgba(244, 63, 94, 0.35)",
         ],
       },
       boxShadow: {
-        "hud-yellow":
-          "0 0 22px -4px rgba(245, 158, 11, 0.32), inset 0 0 12px -4px rgba(245, 158, 11, 0.14)",
         "hud-cyan":
-          "0 0 22px -4px rgba(34, 211, 238, 0.32), inset 0 0 12px -4px rgba(34, 211, 238, 0.14)",
+          "0 0 24px -6px rgba(0, 229, 255, 0.22), inset 0 0 10px -6px rgba(0, 229, 255, 0.12)",
+        "hud-yellow":
+          "0 0 24px -6px rgba(0, 229, 255, 0.22), inset 0 0 10px -6px rgba(0, 229, 255, 0.12)",
         "hud-pink":
-          "0 0 22px -4px rgba(244, 63, 94, 0.35), inset 0 0 12px -4px rgba(244, 63, 94, 0.16)",
+          "0 0 20px -6px rgba(244, 63, 94, 0.25)",
         "hud-emerald":
-          "0 0 22px -4px rgba(16, 185, 129, 0.32), inset 0 0 12px -4px rgba(16, 185, 129, 0.14)",
+          "0 0 20px -6px rgba(16, 185, 129, 0.22)",
       },
       backgroundImage: {
         "cyber-grid":
-          "linear-gradient(to right, rgba(34, 211, 238, 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(34, 211, 238, 0.03) 1px, transparent 1px)",
+          "linear-gradient(to right, rgba(0, 229, 255, 0.025) 1px, transparent 1px), linear-gradient(to bottom, rgba(0, 229, 255, 0.025) 1px, transparent 1px)",
       },
       backgroundSize: {
-        "grid-sm": "28px 28px",
+        "grid-sm": "32px 32px",
       },
     },
   },

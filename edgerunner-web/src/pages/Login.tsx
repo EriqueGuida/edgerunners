@@ -1,48 +1,143 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Terminal, Lock, User, ArrowRight, AlertTriangle, ShieldCheck } from 'lucide-react';
-import api, { TOKEN_KEY, USER_KEY } from '../services/api';
-import { soundEngine } from '../utils/sound';
+import {
+  Lock,
+  User,
+  ArrowRight,
+  AlertTriangle,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  Loader2,
+  ArrowLeft,
+} from 'lucide-react';
+import api from '../services/api';
+import { authenticateInLocalVault } from '../services/localAuthVault';
+import { useAuth } from '../context/AuthContext';
+import { useImmersion } from '../context/ImmersionContext';
+import gridFrankfurtImg from '../assets/afterhours-grid-frankfurt.jpg';
+import type { UserRole } from '../types/contract';
+
+interface LoginResponse {
+  token: string;
+  username?: string;
+  callsign?: string;
+  role?: UserRole;
+  streetCred?: number;
+  eddies?: number;
+  reputation?: number;
+  balance?: number;
+}
+
+interface FieldErrors {
+  username?: string;
+  password?: string;
+}
 
 export function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [authError, setAuthError] = useState<{
+    kind: 'credentials' | 'network' | 'server';
+    message: string;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
-  const registeredMessage = (location.state as { registered?: boolean } | null)?.registered;
+  const { loginWithToken } = useAuth();
+  const { reducedMotion } = useImmersion();
+
+  const locationState = location.state as {
+    registered?: boolean;
+    from?: { pathname?: string };
+  } | null;
+  const registeredMessage = locationState?.registered;
+  const redirectTarget = locationState?.from?.pathname || '/market';
+
+  const validateFields = (): boolean => {
+    const errors: FieldErrors = {};
+    if (!username.trim()) {
+      errors.username = 'Informe seu identificador de operador.';
+    }
+    if (!password) {
+      errors.password = 'Informe sua senha de acesso.';
+    }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setAuthError(null);
+
+    if (!validateFields()) {
+      return;
+    }
+
     setIsLoading(true);
-    soundEngine.playClick();
+    const trimmedUsername = username.trim();
 
     try {
-      const response = await api.post<{ token: string }>('/auth/login', {
-        username: username.trim(),
+      const response = await api.post<LoginResponse>('/auth/login', {
+        username: trimmedUsername,
         password,
       });
 
-      const { token } = response.data;
-      localStorage.setItem(TOKEN_KEY, token);
-      localStorage.setItem(USER_KEY, username.trim());
+      const data = response.data;
+      await loginWithToken(data.token, {
+        username: data.username || trimmedUsername,
+        callsign: data.callsign,
+        role: data.role || 'OPERATOR',
+        streetCred: data.streetCred ?? 1,
+        eddies: data.eddies ?? 0,
+        reputation: data.reputation ?? data.streetCred ?? 1,
+        balance: data.balance ?? data.eddies ?? 0,
+      });
 
-      soundEngine.playSuccess();
-      navigate('/market', { replace: true });
+      navigate(redirectTarget, { replace: true });
     } catch (err: unknown) {
-      soundEngine.playWarning();
-      const axiosErr = err as { response?: { status?: number; data?: { error?: string } } };
-      if (axiosErr.response?.status === 401 || axiosErr.response?.status === 403) {
-        setError('ACESSO NEGADO: Credenciais de operador inválidas ou não autorizadas.');
+      const axiosErr = err as {
+        response?: { status?: number; data?: { error?: string } };
+      };
+
+      // Se o backend não estiver rodando localmente, verifica o Vault local criptografado (SHA-256)
+      if (!axiosErr.response) {
+        const vaultResult = await authenticateInLocalVault({
+          username: trimmedUsername,
+          password,
+        });
+
+        if (vaultResult) {
+          await loginWithToken(vaultResult.token, vaultResult.profile);
+          navigate(redirectTarget, { replace: true });
+          return;
+        }
+
+        setAuthError({
+          kind: 'credentials',
+          message:
+            'Unable to authenticate. Check your credentials and try again.',
+        });
+        return;
+      }
+
+      const status = axiosErr.response.status;
+      if (status === 401 || status === 403 || status === 400) {
+        setAuthError({
+          kind: 'credentials',
+          message:
+            'Unable to authenticate. Check your credentials and try again.',
+        });
       } else {
-        setError(
-          axiosErr.response?.data?.error ||
-            'FALHA DE CONEXÃO: Não foi possível estabelecer link com o servidor AFTERHOURS.'
-        );
+        setAuthError({
+          kind: 'server',
+          message:
+            'The operations server returned an unexpected response. Please try again.',
+        });
       }
     } finally {
       setIsLoading(false);
@@ -50,140 +145,322 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen w-screen bg-dark-bg bg-cyber-grid bg-grid-sm flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Iluminação Atmosférica */}
-      <div className="ambient-glow pointer-events-none absolute -top-32 -left-32 w-96 h-96 bg-amber-500/[0.08] blur-3xl" />
-      <div className="ambient-glow pointer-events-none absolute -bottom-32 -right-32 w-96 h-96 bg-cyan-500/[0.08] blur-3xl" />
-
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: 'easeOut' }}
-        className="w-full max-w-md bg-dark-surface border border-dark-border relative cyber-chamfer ah-reticle shadow-2xl"
+    <div className="min-h-screen w-full bg-[#07090E] text-[#E6EDF3] selection:bg-[#00E5FF] selection:text-[#07090E] flex flex-col lg:grid lg:grid-cols-12 overflow-x-hidden">
+      {/* =========================================================
+          ÁREA DE IDENTIDADE VISUAL (58% largura em Desktop — 7 de 12 colunas - Seção 5.2)
+         ========================================================= */}
+      <aside
+        aria-label="Identidade visual da rede privada AFTERHOURS"
+        className="relative lg:col-span-7 bg-[#07090E] border-b lg:border-b-0 lg:border-r border-[#1E2636] flex flex-col justify-between p-6 sm:p-10 lg:p-14 overflow-hidden"
       >
-        {/* Barra Superior de Identidade */}
-        <div className="h-1 w-full bg-edgerunner-yellow" />
+        <div className="absolute inset-0 z-0 pointer-events-none" aria-hidden="true">
+          <img
+            src={gridFrankfurtImg}
+            alt=""
+            className="w-full h-full object-cover object-center opacity-30 saturate-50 contrast-110"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#07090E]/90 via-[#07090E]/75 to-[#07090E]/95" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#07090E] via-transparent to-[#07090E]/80" />
 
-        <div className="p-8">
-          {/* Header do Terminal */}
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-dark-border">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 bg-edgerunner-yellow/10 border border-edgerunner-yellow flex items-center justify-center shadow-hud-yellow">
-                <Terminal className="w-5 h-5 text-edgerunner-yellow" />
-              </div>
+          <svg
+            viewBox="0 0 700 800"
+            className="hidden lg:block absolute inset-0 w-full h-full opacity-55"
+          >
+            <defs>
+              <pattern
+                id="login-grid"
+                width="70"
+                height="70"
+                patternUnits="userSpaceOnUse"
+              >
+                <path
+                  d="M 70 0 L 0 0 0 70"
+                  fill="none"
+                  stroke="rgba(230, 237, 243, 0.04)"
+                  strokeWidth="1"
+                />
+              </pattern>
+            </defs>
+            <rect width="700" height="800" fill="url(#login-grid)" />
+
+            <path
+              d="M 90 540 L 260 440 L 440 440 L 660 320"
+              fill="none"
+              stroke="#00E5FF"
+              strokeWidth="1.5"
+              strokeOpacity="0.65"
+            />
+            <circle cx="260" cy="440" r="3.5" fill="#00E5FF" />
+            <circle
+              cx="440"
+              cy="440"
+              r="4.5"
+              fill="#07090E"
+              stroke="#00E5FF"
+              strokeWidth="1.5"
+            />
+            <circle cx="660" cy="320" r="4" fill="#00E5FF" />
+          </svg>
+        </div>
+
+        <div className="relative z-10 flex items-center justify-between gap-4">
+          <Link
+            to="/"
+            className="font-display font-bold text-lg tracking-[0.18em] text-[#E6EDF3] hover:text-[#00E5FF] transition-colors"
+          >
+            AFTERHOURS
+          </Link>
+
+          <Link
+            to="/"
+            className="font-mono text-xs text-[#8B98A9] hover:text-[#00E5FF] flex items-center gap-1.5 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>Public Overview</span>
+          </Link>
+        </div>
+
+        <div className="relative z-10 my-8 lg:my-0 max-w-xl space-y-5">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#0C1017]/90 border border-[#1E2636] font-mono text-[11px] text-[#00E5FF] tracking-[0.14em]">
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-[#00E5FF]"
+              aria-hidden="true"
+            />
+            <span>PRIVATE NETWORK // AUTHORIZED ACCESS ONLY</span>
+          </div>
+
+          <h1 className="font-display font-bold text-3xl sm:text-5xl text-[#E6EDF3] tracking-tight leading-[1.06]">
+            YOUR NEXT OPERATION STARTS HERE.
+          </h1>
+
+          <p className="text-sm sm:text-base text-[#8B98A9] leading-relaxed max-w-md">
+            Acesso restrito a operadores credenciados. Estabeleça sessão autenticada para consultar contratos disponíveis, inspecionar briefings e submeter resultados de campo.
+          </p>
+        </div>
+
+        <div className="hidden sm:flex relative z-10 pt-6 border-t border-[#1E2636]/80 items-center justify-between font-mono text-[11px] text-[#8B98A9]">
+          <span>NODE // GATEWAY_CENTRAL_01</span>
+          <span>SESSION_POLICY // STATELESS JWT</span>
+        </div>
+      </aside>
+
+      {/* =========================================================
+          ÁREA DE AUTENTICAÇÃO (42% largura em Desktop — 5 de 12 colunas - Seção 5.2 & 5.3)
+         ========================================================= */}
+      <main className="lg:col-span-5 bg-[#0C1017] flex items-center justify-center p-6 sm:p-10 lg:p-12">
+        <motion.div
+          initial={reducedMotion ? false : { opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="w-full max-w-md space-y-7"
+        >
+          <div className="space-y-2 border-b border-[#1E2636] pb-5">
+            <div className="flex items-center justify-between font-mono text-[11px] text-[#00E5FF] tracking-[0.14em]">
+              <span>TERMINAL GATEWAY</span>
+              <span className="text-[#8B98A9]">AUTH_01</span>
+            </div>
+            <h2 className="font-display font-bold text-2xl sm:text-3xl text-[#E6EDF3] tracking-tight">
+              ACCESS TERMINAL
+            </h2>
+            <p className="text-sm text-[#8B98A9]">
+              Authenticate to continue to your operations environment.
+            </p>
+          </div>
+
+          {registeredMessage && !authError && (
+            <div
+              role="status"
+              className="p-3.5 bg-[#10B981]/10 border border-[#10B981]/60 text-[#E6EDF3] flex items-start gap-3 text-xs sm:text-sm"
+            >
+              <ShieldCheck
+                className="w-4 h-4 text-[#10B981] shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
               <div>
-                <h1 className="cyber-glitch font-display font-bold text-2xl tracking-wider text-white uppercase">
-                  AFTER<span className="text-edgerunner-yellow">HOURS</span>
-                </h1>
-                <p className="font-mono text-[10px] tracking-[0.22em] text-neon-cyan uppercase">
-                  PORTAL DE AUTENTICAÇÃO // V1.0
+                <p className="font-medium text-[#10B981]">
+                  Operator credential registered.
+                </p>
+                <p className="text-xs text-[#8B98A9] mt-0.5">
+                  Sign in below with your identifier and password to open the terminal.
                 </p>
               </div>
             </div>
-            <span className="font-mono text-[10px] px-2 py-1 border border-dark-border text-gray-400">
-              [AUTH_01]
-            </span>
-          </div>
+          )}
 
-          {/* Alerta de Cadastro Recente */}
-          {registeredMessage && !error && (
-            <div className="mb-6 p-3.5 bg-neon-green/10 border border-neon-green text-neon-green flex items-start gap-3 font-mono text-xs">
-              <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>OPERADOR REGISTRADO: Insira suas credenciais para iniciar a sessão.</span>
+          {authError && (
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="p-3.5 bg-[#F43F5E]/10 border border-[#F43F5E]/70 text-[#E6EDF3] flex items-start gap-3 text-xs sm:text-sm"
+            >
+              <AlertTriangle
+                className="w-4 h-4 text-[#F43F5E] shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
+              <div className="space-y-1">
+                <p className="font-medium text-[#F43F5E]">
+                  {authError.kind === 'network'
+                    ? 'Connection Error'
+                    : 'Authentication Failed'}
+                </p>
+                <p className="text-xs text-[#E6EDF3]/90 leading-relaxed">
+                  {authError.message}
+                </p>
+              </div>
             </div>
           )}
 
-          {/* Alerta de Erro */}
-          {error && (
-            <div className="mb-6 p-3.5 bg-neon-pink/10 border border-neon-pink text-neon-pink flex items-start gap-3 font-mono text-xs shadow-hud-pink">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Formulário */}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} noValidate className="space-y-5">
             <div>
               <label
-                htmlFor="username"
-                className="block font-mono text-xs uppercase tracking-widest text-gray-300 mb-2"
+                htmlFor="login-username"
+                className="block text-xs font-medium text-[#E6EDF3] mb-2"
               >
-                // Identificador do Operador
+                Operator identifier
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  id="username"
-                  type="text"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Ex: OP_KESTREL"
-                  className="w-full pl-10 pr-4 py-3 bg-dark-bg border border-dark-border text-white font-mono text-sm placeholder:text-gray-600 focus:outline-none focus:border-edgerunner-yellow focus:shadow-hud-yellow transition-all"
+                <User
+                  className="w-4 h-4 text-[#8B98A9] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                  aria-hidden="true"
                 />
+                <input
+                  id="login-username"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  required
+                  disabled={isLoading}
+                  value={username}
+                  aria-invalid={Boolean(fieldErrors.username)}
+                  aria-describedby={
+                    fieldErrors.username ? 'login-username-error' : undefined
+                  }
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (fieldErrors.username) {
+                      setFieldErrors((prev) => ({ ...prev, username: undefined }));
+                    }
+                  }}
+                  placeholder="Enter your operator handle"
+                  className={`w-full pl-10 pr-4 py-3 bg-[#07090E] border text-sm text-[#E6EDF3] placeholder:text-[#8B98A9]/50 focus:outline-none transition-colors disabled:opacity-60 ${
+                    fieldErrors.username
+                      ? 'border-[#F43F5E] focus:border-[#F43F5E]'
+                      : 'border-[#1E2636] focus:border-[#00E5FF]'
+                  }`}
+                />
+              </div>
+              <div className="min-h-[20px] pt-1">
+                {fieldErrors.username && (
+                  <p
+                    id="login-username-error"
+                    role="alert"
+                    className="text-xs text-[#F43F5E] flex items-center gap-1.5"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    <span>{fieldErrors.username}</span>
+                  </p>
+                )}
               </div>
             </div>
 
             <div>
               <label
-                htmlFor="password"
-                className="block font-mono text-xs uppercase tracking-widest text-gray-300 mb-2"
+                htmlFor="login-password"
+                className="block text-xs font-medium text-[#E6EDF3] mb-2"
               >
-                // Chave de Acesso
+                Password
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  className="w-full pl-10 pr-4 py-3 bg-dark-bg border border-dark-border text-white font-mono text-sm placeholder:text-gray-600 focus:outline-none focus:border-edgerunner-yellow focus:shadow-hud-yellow transition-all"
+                <Lock
+                  className="w-4 h-4 text-[#8B98A9] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                  aria-hidden="true"
                 />
+                <input
+                  id="login-password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  required
+                  disabled={isLoading}
+                  value={password}
+                  aria-invalid={Boolean(fieldErrors.password)}
+                  aria-describedby={
+                    fieldErrors.password ? 'login-password-error' : undefined
+                  }
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (fieldErrors.password) {
+                      setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                    }
+                  }}
+                  placeholder="••••••••••••"
+                  className={`w-full pl-10 pr-12 py-3 bg-[#07090E] border text-sm text-[#E6EDF3] placeholder:text-[#8B98A9]/50 focus:outline-none transition-colors disabled:opacity-60 ${
+                    fieldErrors.password
+                      ? 'border-[#F43F5E] focus:border-[#F43F5E]'
+                      : 'border-[#1E2636] focus:border-[#00E5FF]'
+                  }`}
+                />
+
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[#8B98A9] hover:text-[#E6EDF3] transition-colors cursor-pointer"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" aria-hidden="true" />
+                  ) : (
+                    <Eye className="w-4 h-4" aria-hidden="true" />
+                  )}
+                </button>
+              </div>
+              <div className="min-h-[20px] pt-1">
+                {fieldErrors.password && (
+                  <p
+                    id="login-password-error"
+                    role="alert"
+                    className="text-xs text-[#F43F5E] flex items-center gap-1.5"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    <span>{fieldErrors.password}</span>
+                  </p>
+                )}
               </div>
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 px-6 bg-edgerunner-yellow text-dark-bg font-display font-bold text-base uppercase tracking-widest border border-edgerunner-yellow hover:bg-transparent hover:text-edgerunner-yellow hover:shadow-hud-yellow transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full py-3.5 px-6 bg-[#00E5FF] text-[#07090E] hover:bg-[#00E5FF]/90 font-mono text-xs font-semibold tracking-[0.16em] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <span>{isLoading ? 'VERIFICANDO CREDENCIAIS...' : 'ACESSAR TERMINAL'}</span>
-              <ArrowRight className="w-4 h-4" />
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                  <span>AUTHENTICATING...</span>
+                </>
+              ) : (
+                <>
+                  <span>AUTHENTICATE</span>
+                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                </>
+              )}
             </button>
           </form>
 
-          {/* Link para Registro */}
-          <div className="mt-6 pt-5 border-t border-dark-border flex items-center justify-between font-mono text-xs text-gray-400">
-            <span>NOVO OPERADOR?</span>
+          <div className="pt-5 border-t border-[#1E2636] flex items-center justify-between text-xs text-[#8B98A9]">
+            <span>No active operator credential?</span>
             <Link
               to="/register"
-              onClick={() => soundEngine.playClick()}
-              className="text-neon-cyan hover:underline tracking-wider uppercase flex items-center gap-1"
+              className="font-mono text-[#00E5FF] hover:underline tracking-wider flex items-center gap-1"
             >
-              [CRIAR CREDENCIAL]
+              <span>REGISTER OPERATOR</span>
+              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
             </Link>
           </div>
-
-          {/* Acesso Rápido de Contingência / Demonstração */}
-          <div className="mt-4 pt-3 border-t border-dark-border/50 text-center">
-            <button
-              type="button"
-              onClick={() => {
-                soundEngine.playSuccess();
-                localStorage.setItem(TOKEN_KEY, 'afterhours-preview-token');
-                localStorage.setItem(USER_KEY, 'OP_VANGUARD');
-                navigate('/market');
-              }}
-              className="font-mono text-[11px] text-gray-500 hover:text-edgerunner-yellow tracking-widest uppercase transition-colors cursor-pointer"
-            >
-              [MODO DEMONSTRAÇÃO // ACESSO DIRETO AO TERMINAL]
-            </button>
-          </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      </main>
     </div>
   );
 }
