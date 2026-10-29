@@ -12,64 +12,73 @@ import api from '../services/api';
 import { ContractCard } from '../components/contracts/ContractCard';
 import { DEMO_MY_CONTRACTS_KEY } from './MyContracts';
 import type { Contract, ThreatLevel } from '../types/contract';
+import { soundEngine } from '../utils/sound';
 
-// Contratos de demonstração caso o usuário esteja em DEV_MODE sem o MySQL ligado
+// Contratos de demonstração ambientados no universo original AFTERHOURS (Terra real)
 const FALLBACK_CONTRACTS: Contract[] = [
   {
     id: 101,
-    title: 'Neutralize Cyberpsycho in Santo Domingo',
-    targetName: 'Lt. James Norris',
-    faction: 'Maelstrom',
+    title: 'Extração de Criptografia Quântica em Shinjuku',
+    targetName: 'Servidor Kestrel-09 // Tóquio',
+    faction: 'Aethelgard Dynamics',
     reward: 45000,
     threatLevel: 'PSYCHO',
     status: 'AVAILABLE',
   },
   {
     id: 102,
-    title: 'Extract Prototype Sandevistan Schematics',
-    targetName: 'Kenichi Zaburo',
-    faction: 'Arasaka Corp',
+    title: 'Interceptação de Remessa Biométrica na Paulista',
+    targetName: 'Comboio Blindado V-12 // São Paulo',
+    faction: 'Helios Biotech',
     reward: 28500,
     threatLevel: 'HIGH',
     status: 'AVAILABLE',
   },
   {
     id: 103,
-    title: 'Disrupt Scavenger Haunt in Japantown',
-    targetName: 'Grigoriy "Butcher" Markov',
-    faction: 'Scavengers',
+    title: 'Neutralização de Nó Clandestino em Kreuzberg',
+    targetName: 'Estação Subterrânea 04 // Berlim',
+    faction: 'Coletivo Null-Sec',
     reward: 14000,
     threatLevel: 'MEDIUM',
     status: 'AVAILABLE',
   },
   {
     id: 104,
-    title: 'Intercept Militech Convoy Data Shard',
-    targetName: 'Convoy Alpha-9',
-    faction: 'Militech',
+    title: 'Recuperação de Dossiê Financeiro em Marina Bay',
+    targetName: 'Cofre Orbital S-3 // Singapura',
+    faction: 'Consórcio Meridian',
     reward: 19200,
     threatLevel: 'HIGH',
     status: 'AVAILABLE',
   },
   {
     id: 105,
-    title: 'Clear Tyger Claws Extortion Racket',
-    targetName: 'Shinji Sato',
-    faction: 'Tyger Claws',
+    title: 'Varredura de Contramedidas em Gangnam',
+    targetName: 'Torre Han-River // Seul',
+    faction: 'Kurogane Systems',
     reward: 7500,
     threatLevel: 'LOW',
     status: 'AVAILABLE',
   },
   {
     id: 106,
-    title: 'Zero Rogue Netrunner in Pacifica',
-    targetName: 'Voodoo Ghost_99',
-    faction: 'Voodoo Boys',
+    title: 'Sabotagem de Reator de Dados nos Alpes',
+    targetName: 'Bunker Criptográfico // Zurique',
+    faction: 'Vanguard Sovereign',
     reward: 62000,
     threatLevel: 'PSYCHO',
     status: 'AVAILABLE',
   },
 ];
+
+const THREAT_FILTER_LABELS: Record<ThreatLevel | 'ALL', string> = {
+  ALL: 'TODOS',
+  LOW: 'BAIXO',
+  MEDIUM: 'MÉDIO',
+  HIGH: 'ALTO',
+  PSYCHO: 'CRÍTICO',
+};
 
 export function Market() {
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -78,7 +87,7 @@ export function Market() {
   const [acceptingId, setAcceptingId] = useState<number | null>(null);
   const [selectedThreat, setSelectedThreat] = useState<ThreatLevel | 'ALL'>('ALL');
 
-  // Estado para modal rápido de criação de contrato (para testar o POST /api/contracts)
+  // Estado para modal de publicação de contrato
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newTarget, setNewTarget] = useState('');
@@ -94,7 +103,6 @@ export function Market() {
       const response = await api.get<Contract[]>('/api/contracts/available');
       setContracts(response.data);
     } catch {
-      // Se o backend/MySQL não estiver acessível, carrega o feed tático de demonstração
       setIsOfflineDemo(true);
       setContracts(FALLBACK_CONTRACTS);
     } finally {
@@ -122,10 +130,10 @@ export function Market() {
         ];
         localStorage.setItem(DEMO_MY_CONTRACTS_KEY, JSON.stringify(updatedMyContracts));
       }
-      // Remove o contrato aceito da lista de disponíveis
       setContracts((prev) => prev.filter((c) => c.id !== id));
     } catch (err) {
       console.error('Erro ao aceitar contrato:', err);
+      soundEngine.playWarning();
     } finally {
       setAcceptingId(null);
     }
@@ -153,6 +161,7 @@ export function Market() {
         };
         setContracts((prev) => [mockCreated, ...prev]);
       }
+      soundEngine.playSuccess();
       setIsCreateModalOpen(false);
       setNewTitle('');
       setNewTarget('');
@@ -161,6 +170,7 @@ export function Market() {
       setNewThreat('MEDIUM');
     } catch (err) {
       console.error('Erro ao publicar contrato:', err);
+      soundEngine.playWarning();
     }
   };
 
@@ -172,48 +182,51 @@ export function Market() {
   return (
     <div className="space-y-8">
       {/* =========================================================
-          HEADER TÁTICO DO MERCADO
+          CABEÇALHO DO CATÁLOGO DE CONTRATOS (AFTERHOURS)
          ========================================================= */}
-      <div className="border-2 border-dark-border bg-dark-surface/90 p-6 cyber-chamfer relative overflow-hidden">
-        <div className="h-1 w-full bg-gradient-to-r from-edgerunner-yellow via-neon-cyan to-neon-pink absolute top-0 left-0" />
+      <div className="border border-dark-border bg-dark-surface/90 p-6 cyber-chamfer ah-reticle relative overflow-hidden">
+        <div className="h-[2px] w-full bg-gradient-to-r from-edgerunner-yellow via-neon-cyan to-neon-pink absolute top-0 left-0" />
 
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 font-mono text-xs text-neon-cyan uppercase tracking-widest mb-1">
-              <Radar className="w-4 h-4 animate-spin" style={{ animationDuration: '6s' }} />
-              <span>// NIGHT CITY FIXER NETWORK — LIVE BOUNTY FEED</span>
+              <Radar className="w-4 h-4 text-edgerunner-yellow" />
+              <span>// REDE GLOBAL AFTERHOURS — DIRETÓRIO DE CONTRATOS</span>
             </div>
-            <h1
-              data-text="CONTRACT MARKET"
-              className="cyber-glitch font-display font-bold text-3xl md:text-4xl tracking-wider uppercase text-white"
-            >
-              Contract <span className="text-edgerunner-yellow drop-shadow-neon-yellow">Market</span>
+            <h1 className="cyber-glitch font-display font-bold text-3xl md:text-4xl tracking-wider uppercase text-white">
+              Catálogo de <span className="text-edgerunner-yellow">Contratos</span>
             </h1>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={() => setIsCreateModalOpen(true)}
+              onClick={() => {
+                soundEngine.playClick();
+                setIsCreateModalOpen(true);
+              }}
               className="px-4 py-2.5 bg-edgerunner-yellow text-dark-bg font-mono text-xs font-bold uppercase tracking-widest border border-edgerunner-yellow hover:bg-transparent hover:text-edgerunner-yellow hover:shadow-hud-yellow transition-all flex items-center gap-2 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>NEW GIG</span>
+              <span>NOVO CONTRATO</span>
             </button>
 
             <button
               type="button"
-              onClick={fetchAvailableContracts}
+              onClick={() => {
+                soundEngine.playClick();
+                fetchAvailableContracts();
+              }}
               disabled={isLoading}
               className="px-4 py-2.5 bg-dark-card border border-dark-border hover:border-neon-cyan text-gray-300 hover:text-neon-cyan font-mono text-xs uppercase tracking-widest transition-all flex items-center gap-2 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-neon-cyan' : ''}`} />
-              <span>SYNC FEED</span>
+              <span>ATUALIZAR REDE</span>
             </button>
           </div>
         </div>
 
-        {/* Barra de Filtros por Threat Level */}
+        {/* Barra de Filtros por Classificação de Risco */}
         <div className="mt-6 pt-4 border-t border-dark-border flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
             {(['ALL', 'LOW', 'MEDIUM', 'HIGH', 'PSYCHO'] as const).map((level) => {
@@ -222,7 +235,10 @@ export function Market() {
                 <button
                   key={level}
                   type="button"
-                  onClick={() => setSelectedThreat(level)}
+                  onClick={() => {
+                    soundEngine.playClick();
+                    setSelectedThreat(level);
+                  }}
                   className={`px-3 py-1 font-mono text-xs uppercase tracking-widest border transition-all cursor-pointer ${
                     isSelected
                       ? level === 'PSYCHO'
@@ -231,39 +247,39 @@ export function Market() {
                       : 'bg-dark-card border-dark-border text-gray-400 hover:border-neon-cyan hover:text-neon-cyan'
                   }`}
                 >
-                  {level}
+                  {THREAT_FILTER_LABELS[level]}
                 </button>
               );
             })}
           </div>
 
           <div className="font-mono text-xs text-gray-400 uppercase tracking-widest">
-            AVAILABLE GIGS: <strong className="text-edgerunner-yellow">{filteredContracts.length}</strong>
+            DISPONÍVEIS: <strong className="text-edgerunner-yellow">{filteredContracts.length}</strong>
           </div>
         </div>
       </div>
 
-      {/* Banner Informativo caso esteja em Modo Demo Offline */}
+      {/* Aviso de contingência caso o backend não esteja ativo */}
       {isOfflineDemo && (
-        <div className="p-3.5 bg-edgerunner-yellow/10 border border-edgerunner-yellow/60 text-edgerunner-yellow flex items-center justify-between gap-3 font-mono text-xs">
+        <div className="p-3.5 bg-edgerunner-yellow/10 border border-edgerunner-yellow/50 text-edgerunner-yellow flex items-center justify-between gap-3 font-mono text-xs">
           <div className="flex items-center gap-2.5">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>
-              SIMULATION FEED ATIVO: Exibindo contratos táticos locais (conecte o backend Spring Boot em localhost:8080 para dados reais do MySQL).
+              MODO DE SIMULAÇÃO LOCAL: Exibindo contratos de contingência (inicie o servidor Spring Boot em localhost:8080 para persistência no MySQL).
             </span>
           </div>
         </div>
       )}
 
       {/* =========================================================
-          GRID RESPONSIVO DE CONTRATOS (1 col Mobile, 2/3 Desktop)
+          GRID RESPONSIVO DE CONTRATOS
          ========================================================= */}
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {[1, 2, 3, 4, 5, 6].map((skeleton) => (
             <div
               key={skeleton}
-              className="h-64 bg-dark-surface border-2 border-dark-border p-6 animate-pulse flex flex-col justify-between"
+              className="h-64 bg-dark-surface border border-dark-border p-6 animate-pulse flex flex-col justify-between"
             >
               <div className="h-4 w-1/3 bg-dark-border" />
               <div className="h-6 w-3/4 bg-dark-border" />
@@ -273,13 +289,13 @@ export function Market() {
           ))}
         </div>
       ) : filteredContracts.length === 0 ? (
-        <div className="border-2 border-dark-border bg-dark-surface/70 p-12 text-center cyber-chamfer">
+        <div className="border border-dark-border bg-dark-surface/70 p-12 text-center cyber-chamfer">
           <Skull className="w-10 h-10 text-gray-500 mx-auto mb-3" />
           <h2 className="font-display font-bold text-2xl text-white uppercase tracking-wider">
-            No Active Bounties Found
+            Nenhum Contrato Localizado
           </h2>
           <p className="font-mono text-xs text-gray-400 mt-1 uppercase tracking-widest">
-            Nenhum contrato disponível para o filtro selecionado no momento.
+            Não há contratos disponíveis para os critérios selecionados no momento.
           </p>
         </div>
       ) : (
@@ -292,13 +308,12 @@ export function Market() {
               <motion.div
                 key={contract.id}
                 layout
-                initial={{ opacity: 0, scale: 0.95 }}
+                initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{
                   opacity: 0,
-                  scale: 0.9,
-                  filter: 'brightness(2)',
-                  transition: { duration: 0.25 },
+                  scale: 0.92,
+                  transition: { duration: 0.2 },
                 }}
               >
                 <ContractCard
@@ -313,18 +328,19 @@ export function Market() {
       )}
 
       {/* =========================================================
-          MODAL DE CRIAÇÃO RÁPIDA DE CONTRATO (FIXER POST)
+          MODAL DE PUBLICAÇÃO DE CONTRATO
          ========================================================= */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-md bg-dark-surface border-2 border-edgerunner-yellow cyber-chamfer p-6 relative shadow-hud-yellow">
+          <div className="w-full max-w-md bg-dark-surface border border-edgerunner-yellow cyber-chamfer p-6 relative shadow-hud-yellow">
             <div className="flex items-center justify-between border-b border-dark-border pb-3 mb-5">
               <h2 className="font-display font-bold text-xl text-edgerunner-yellow uppercase tracking-wider">
-                // Post New Bounty
+                // Registrar Novo Contrato
               </h2>
               <button
                 type="button"
                 onClick={() => setIsCreateModalOpen(false)}
+                aria-label="Fechar modal"
                 className="text-gray-400 hover:text-neon-pink cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -333,37 +349,37 @@ export function Market() {
 
             <form onSubmit={handleCreateContract} className="space-y-4 font-mono text-xs">
               <div>
-                <label className="block text-gray-300 uppercase mb-1">Contract Title</label>
+                <label className="block text-gray-300 uppercase mb-1">Título da Operação</label>
                 <input
                   type="text"
                   required
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Ex: Eliminate Maelstrom Lieutenant"
+                  placeholder="Ex: Extração de Servidor em Tóquio"
                   className="w-full px-3 py-2.5 bg-dark-bg border border-dark-border text-white focus:outline-none focus:border-edgerunner-yellow"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-gray-300 uppercase mb-1">Target Name</label>
+                  <label className="block text-gray-300 uppercase mb-1">Alvo / Local</label>
                   <input
                     type="text"
                     required
                     value={newTarget}
                     onChange={(e) => setNewTarget(e.target.value)}
-                    placeholder="Ex: Royce"
+                    placeholder="Ex: Setor Shinjuku-04"
                     className="w-full px-3 py-2.5 bg-dark-bg border border-dark-border text-white focus:outline-none focus:border-edgerunner-yellow"
                   />
                 </div>
                 <div>
-                  <label className="block text-gray-300 uppercase mb-1">Faction</label>
+                  <label className="block text-gray-300 uppercase mb-1">Organização</label>
                   <input
                     type="text"
                     required
                     value={newFaction}
                     onChange={(e) => setNewFaction(e.target.value)}
-                    placeholder="Ex: Maelstrom"
+                    placeholder="Ex: Aethelgard Corp"
                     className="w-full px-3 py-2.5 bg-dark-bg border border-dark-border text-white focus:outline-none focus:border-edgerunner-yellow"
                   />
                 </div>
@@ -371,7 +387,7 @@ export function Market() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-gray-300 uppercase mb-1">Reward (€$)</label>
+                  <label className="block text-gray-300 uppercase mb-1">Recompensa (CR¢)</label>
                   <input
                     type="number"
                     required
@@ -383,16 +399,16 @@ export function Market() {
                   />
                 </div>
                 <div>
-                  <label className="block text-gray-300 uppercase mb-1">Threat Level</label>
+                  <label className="block text-gray-300 uppercase mb-1">Risco Estimado</label>
                   <select
                     value={newThreat}
                     onChange={(e) => setNewThreat(e.target.value as ThreatLevel)}
                     className="w-full px-3 py-2.5 bg-dark-bg border border-dark-border text-white focus:outline-none focus:border-edgerunner-yellow"
                   >
-                    <option value="LOW">LOW</option>
-                    <option value="MEDIUM">MEDIUM</option>
-                    <option value="HIGH">HIGH</option>
-                    <option value="PSYCHO">PSYCHO</option>
+                    <option value="LOW">BAIXO</option>
+                    <option value="MEDIUM">MÉDIO</option>
+                    <option value="HIGH">ALTO</option>
+                    <option value="PSYCHO">CRÍTICO</option>
                   </select>
                 </div>
               </div>
@@ -401,7 +417,7 @@ export function Market() {
                 type="submit"
                 className="w-full py-3 mt-2 bg-edgerunner-yellow text-dark-bg font-display font-bold text-sm uppercase tracking-widest hover:bg-transparent hover:text-edgerunner-yellow border border-edgerunner-yellow transition-all cursor-pointer"
               >
-                BROADCAST CONTRACT TO NET
+                PUBLICAR NA REDE AFTERHOURS
               </button>
             </form>
           </div>

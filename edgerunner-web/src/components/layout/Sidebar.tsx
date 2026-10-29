@@ -10,8 +10,16 @@ import {
   Terminal,
   Menu,
   X,
-  ShieldAlert,
+  Shield,
+  Volume2,
+  VolumeX,
+  Eye,
+  Layers,
+  UserCheck,
 } from 'lucide-react';
+import { TOKEN_KEY, USER_KEY } from '../../services/api';
+import { useImmersion } from '../../context/ImmersionContext';
+import { soundEngine } from '../../utils/sound';
 
 interface NavItem {
   label: string;
@@ -22,15 +30,15 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    label: 'Market',
+    label: 'Contratos',
     path: '/market',
-    code: 'NET_01',
+    code: 'CAT_01',
     icon: Crosshair,
   },
   {
-    label: 'My Contracts',
+    label: 'Operações',
     path: '/my-contracts',
-    code: 'GIG_02',
+    code: 'OPS_02',
     icon: FileCode2,
   },
 ];
@@ -39,9 +47,14 @@ export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const { visualMode, soundEnabled, toggleVisualMode, toggleSound } = useImmersion();
+
+  const operatorCallsign = localStorage.getItem(USER_KEY) || 'OP_VANGUARD';
 
   const handleLogout = () => {
-    localStorage.removeItem('edgerunner_token');
+    soundEngine.playClick();
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
     setIsMobileMenuOpen(false);
     navigate('/login');
   };
@@ -49,22 +62,22 @@ export function Sidebar() {
   return (
     <>
       {/* =========================================================
-          DESKTOP SIDEBAR (Retrátil com Framer Motion)
+          SIDEBAR DESKTOP (Retrátil & Tática AFTERHOURS)
          ========================================================= */}
       <motion.aside
         initial={false}
-        animate={{ width: isCollapsed ? 84 : 272 }}
-        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+        animate={{ width: isCollapsed ? 84 : 276 }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
         className="hidden md:flex flex-col h-screen bg-dark-surface border-r border-dark-border relative select-none z-30 shrink-0"
       >
-        {/* Linha decorativa superior Amarelo Cyberpunk */}
+        {/* Linha superior de assinatura visual AFTERHOURS */}
         <div className="h-[2px] w-full bg-gradient-to-r from-edgerunner-yellow via-neon-cyan to-transparent" />
 
-        {/* HEADER / LOGO */}
+        {/* HEADER / IDENTIDADE DO TERMINAL */}
         <div className="h-20 px-5 flex items-center justify-between border-b border-dark-border">
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="w-10 h-10 shrink-0 bg-edgerunner-yellow/10 border border-edgerunner-yellow flex items-center justify-center shadow-hud-yellow">
-              <Terminal className="w-5 h-5 text-edgerunner-yellow drop-shadow-neon-yellow" />
+              <Terminal className="w-5 h-5 text-edgerunner-yellow" />
             </div>
 
             <AnimatePresence mode="wait">
@@ -79,11 +92,11 @@ export function Sidebar() {
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="font-display font-bold text-xl tracking-wider text-white uppercase">
-                      EDGE<span className="text-edgerunner-yellow">RUNNER</span>
+                      AFTER<span className="text-edgerunner-yellow">HOURS</span>
                     </span>
                   </div>
                   <p className="font-mono text-[10px] tracking-[0.2em] text-neon-cyan uppercase">
-                    SYS.VER // 2.077
+                    TERMINAL // VER 1.0
                   </p>
                 </motion.div>
               )}
@@ -91,11 +104,14 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* BOTÃO TÁTICO DE EXPANDIR / RECOLHER */}
+        {/* BOTÃO DE EXPANDIR / RECOLHER */}
         <button
           type="button"
-          onClick={() => setIsCollapsed((prev) => !prev)}
-          aria-label={isCollapsed ? 'Expandir Sidebar' : 'Recolher Sidebar'}
+          onClick={() => {
+            soundEngine.playClick();
+            setIsCollapsed((prev) => !prev);
+          }}
+          aria-label={isCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
           className="absolute -right-3.5 top-24 w-7 h-7 bg-dark-card border border-dark-border hover:border-neon-cyan text-gray-400 hover:text-neon-cyan flex items-center justify-center transition-colors z-40 cursor-pointer"
         >
           {isCollapsed ? (
@@ -105,34 +121,45 @@ export function Sidebar() {
           )}
         </button>
 
-        {/* STATUS TELEMETRIA */}
-        <div className="px-5 py-4 border-b border-dark-border/60">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2 h-2 bg-neon-green rounded-none animate-pulse shadow-[0_0_8px_#00FF66]" />
+        {/* IDENTIFICAÇÃO DO OPERADOR AUTENTICADO */}
+        <div className="px-5 py-4 border-b border-dark-border/60 bg-dark-card/30">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <span
+              className="w-2 h-2 shrink-0 bg-neon-green rounded-none shadow-[0_0_8px_#10B981]"
+              aria-hidden="true"
+            />
             <AnimatePresence>
               {!isCollapsed && (
-                <motion.span
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="font-mono text-[11px] text-gray-400 tracking-widest uppercase whitespace-nowrap"
+                  className="truncate"
                 >
-                  NETLINK: ENCRYPTED
-                </motion.span>
+                  <span className="block font-mono text-[10px] text-gray-400 tracking-widest uppercase">
+                    OPERADOR ATIVO
+                  </span>
+                  <span className="font-mono text-xs font-bold text-white tracking-wider uppercase flex items-center gap-1.5 mt-0.5 truncate">
+                    <UserCheck className="w-3.5 h-3.5 text-neon-cyan shrink-0" />
+                    {operatorCallsign}
+                  </span>
+                </motion.div>
               )}
             </AnimatePresence>
           </div>
         </div>
 
-        {/* LINKS DE NAVEGAÇÃO */}
-        <nav className="flex-1 py-6 px-3 space-y-2">
+        {/* LINKS DE NAVEGAÇÃO OPERACIONAL */}
+        <nav aria-label="Navegação Principal" className="flex-1 py-6 px-3 space-y-2">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
                 key={item.path}
                 to={item.path}
+                onClick={() => soundEngine.playClick()}
+                onMouseEnter={() => soundEngine.playHover()}
                 className={({ isActive }) =>
                   `group relative flex items-center gap-3.5 px-3.5 py-3 border transition-all duration-150 ${
                     isActive
@@ -143,7 +170,6 @@ export function Sidebar() {
               >
                 {({ isActive }) => (
                   <>
-                    {/* Barra lateral indicadora ativa */}
                     <span
                       className={`absolute left-0 top-0 bottom-0 w-1 transition-colors ${
                         isActive
@@ -155,7 +181,7 @@ export function Sidebar() {
                     <Icon
                       className={`w-5 h-5 shrink-0 transition-transform duration-150 group-hover:scale-105 ${
                         isActive
-                          ? 'text-edgerunner-yellow drop-shadow-neon-yellow'
+                          ? 'text-edgerunner-yellow'
                           : 'text-gray-400 group-hover:text-neon-cyan'
                       }`}
                     />
@@ -173,7 +199,7 @@ export function Sidebar() {
                           <span className="font-mono text-sm tracking-widest uppercase">
                             {item.label}
                           </span>
-                          <span className="font-mono text-[10px] opacity-50">
+                          <span className="font-mono text-[10px] opacity-60">
                             [{item.code}]
                           </span>
                         </motion.div>
@@ -186,15 +212,16 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* RODAPÉ / LOGOUT */}
+        {/* RODAPÉ / ENCERRAMENTO DE SESSÃO */}
         <div className="p-3 border-t border-dark-border">
           <button
             type="button"
             onClick={handleLogout}
+            onMouseEnter={() => soundEngine.playHover()}
             className="w-full group relative flex items-center gap-3.5 px-3.5 py-3 border border-dark-border bg-dark-card/50 text-gray-400 hover:bg-neon-pink/10 hover:border-neon-pink hover:text-neon-pink transition-all duration-150 cursor-pointer"
           >
             <span className="absolute left-0 top-0 bottom-0 w-1 bg-transparent group-hover:bg-neon-pink transition-colors" />
-            <LogOut className="w-5 h-5 shrink-0 group-hover:drop-shadow-neon-pink" />
+            <LogOut className="w-5 h-5 shrink-0" />
 
             <AnimatePresence mode="wait">
               {!isCollapsed && (
@@ -207,10 +234,10 @@ export function Sidebar() {
                   className="flex flex-1 items-center justify-between whitespace-nowrap overflow-hidden"
                 >
                   <span className="font-mono text-sm tracking-widest uppercase">
-                    Logout
+                    Sair
                   </span>
                   <span className="font-mono text-[10px] opacity-60">
-                    [JACK_OUT]
+                    [ENCERRAR]
                   </span>
                 </motion.div>
               )}
@@ -220,9 +247,8 @@ export function Sidebar() {
       </motion.aside>
 
       {/* =========================================================
-          MOBILE HUD HEADER + MENU HAMBÚRGUER TÁTICO + BOTTOM BAR
+          MOBILE HUD HEADER + DRAWER TÁTICO + BARRA INFERIOR
          ========================================================= */}
-      {/* Top Bar Mobile */}
       <header className="md:hidden h-16 px-4 bg-dark-surface border-b border-dark-border flex items-center justify-between z-40 shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 bg-edgerunner-yellow/10 border border-edgerunner-yellow flex items-center justify-center">
@@ -230,37 +256,43 @@ export function Sidebar() {
           </div>
           <div>
             <span className="font-display font-bold text-lg tracking-wider text-white uppercase">
-              EDGE<span className="text-edgerunner-yellow">RUNNER</span>
+              AFTER<span className="text-edgerunner-yellow">HOURS</span>
             </span>
             <span className="block font-mono text-[9px] tracking-widest text-neon-cyan uppercase">
-              HUD // MOBILE
+              TERMINAL MÓVEL // {operatorCallsign}
             </span>
           </div>
         </div>
 
         <button
           type="button"
-          onClick={() => setIsMobileMenuOpen((prev) => !prev)}
-          aria-label="Menu Tático"
+          onClick={() => {
+            soundEngine.playClick();
+            setIsMobileMenuOpen((prev) => !prev);
+          }}
+          aria-label="Abrir menu de navegação e preferências"
           className="p-2 border border-dark-border bg-dark-card text-edgerunner-yellow hover:border-edgerunner-yellow transition-colors"
         >
           {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       </header>
 
-      {/* Drawer Tático Mobile (Hambúrguer) */}
+      {/* Drawer Tático Mobile */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div
             initial={{ opacity: 0, y: -16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -16 }}
-            transition={{ duration: 0.2 }}
-            className="md:hidden fixed inset-x-0 top-16 bg-dark-surface/95 backdrop-blur-md border-b border-neon-cyan/40 p-4 space-y-2 z-50 shadow-hud-cyan"
+            transition={{ duration: 0.18 }}
+            className="md:hidden fixed inset-x-0 top-16 bg-dark-surface/95 backdrop-blur-md border-b border-neon-cyan/40 p-4 space-y-3 z-50 shadow-hud-cyan"
           >
-            <div className="flex items-center gap-2 pb-2 mb-2 border-b border-dark-border font-mono text-[11px] text-neon-cyan uppercase tracking-widest">
-              <ShieldAlert className="w-4 h-4" />
-              <span>Tactical Navigation Matrix</span>
+            <div className="flex items-center justify-between pb-2 border-b border-dark-border font-mono text-[11px] text-neon-cyan uppercase tracking-widest">
+              <span className="flex items-center gap-2">
+                <Shield className="w-4 h-4" />
+                Matriz de Navegação
+              </span>
+              <span className="text-gray-400">{operatorCallsign}</span>
             </div>
 
             {navItems.map((item) => {
@@ -269,7 +301,10 @@ export function Sidebar() {
                 <NavLink
                   key={item.path}
                   to={item.path}
-                  onClick={() => setIsMobileMenuOpen(false)}
+                  onClick={() => {
+                    soundEngine.playClick();
+                    setIsMobileMenuOpen(false);
+                  }}
                   className={({ isActive }) =>
                     `flex items-center justify-between px-4 py-3 border font-mono text-sm uppercase tracking-widest ${
                       isActive
@@ -287,6 +322,45 @@ export function Sidebar() {
               );
             })}
 
+            {/* Preferências de Imersão no Mobile */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dark-border">
+              <button
+                type="button"
+                onClick={toggleVisualMode}
+                className="px-3 py-2.5 border border-dark-border bg-dark-card text-gray-300 font-mono text-xs uppercase flex items-center justify-center gap-2"
+              >
+                {visualMode === 'immersive' ? (
+                  <>
+                    <Layers className="w-3.5 h-3.5 text-neon-cyan" />
+                    <span>Imersivo</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-3.5 h-3.5 text-edgerunner-yellow" />
+                    <span>Simplificado</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleSound}
+                className="px-3 py-2.5 border border-dark-border bg-dark-card text-gray-300 font-mono text-xs uppercase flex items-center justify-center gap-2"
+              >
+                {soundEnabled ? (
+                  <>
+                    <Volume2 className="w-3.5 h-3.5 text-neon-green" />
+                    <span>Áudio On</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="w-3.5 h-3.5 text-gray-500" />
+                    <span>Mudo</span>
+                  </>
+                )}
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={handleLogout}
@@ -294,22 +368,26 @@ export function Sidebar() {
             >
               <span className="flex items-center gap-3">
                 <LogOut className="w-4 h-4" />
-                Logout
+                Encerrar Sessão
               </span>
-              <span className="text-[10px]">[JACK_OUT]</span>
+              <span className="text-[10px]">[SAIR]</span>
             </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Bottom Bar Tática Mobile */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 bg-dark-surface border-t border-dark-border grid grid-cols-3 z-40">
+      {/* Barra Inferior Mobile */}
+      <nav
+        aria-label="Navegação Rápida Mobile"
+        className="md:hidden fixed bottom-0 inset-x-0 h-16 bg-dark-surface border-t border-dark-border grid grid-cols-3 z-40"
+      >
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
             <NavLink
               key={item.path}
               to={item.path}
+              onClick={() => soundEngine.playClick()}
               className={({ isActive }) =>
                 `flex flex-col items-center justify-center gap-1 border-r border-dark-border font-mono text-[11px] uppercase tracking-wider transition-colors ${
                   isActive
@@ -330,7 +408,7 @@ export function Sidebar() {
           className="flex flex-col items-center justify-center gap-1 font-mono text-[11px] uppercase tracking-wider text-gray-400 hover:text-neon-pink active:bg-neon-pink/10 transition-colors"
         >
           <LogOut className="w-4 h-4" />
-          <span>Logout</span>
+          <span>Sair</span>
         </button>
       </nav>
     </>

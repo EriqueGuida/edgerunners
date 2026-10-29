@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { motion, useAnimationControls } from 'framer-motion';
 import { Zap, CheckCircle2, Radio } from 'lucide-react';
+import { useImmersion } from '../../context/ImmersionContext';
+import { soundEngine } from '../../utils/sound';
 
 interface HoldToAcceptButtonProps {
   onAccept: () => void | Promise<void>;
@@ -13,12 +15,13 @@ type ButtonPhase = 'idle' | 'holding' | 'success';
 
 export function HoldToAcceptButton({
   onAccept,
-  holdDurationMs = 2000,
+  holdDurationMs = 1600,
   isPsycho = false,
   disabled = false,
 }: HoldToAcceptButtonProps) {
   const [phase, setPhase] = useState<ButtonPhase>('idle');
   const [progressPct, setProgressPct] = useState<number>(0);
+  const { reducedMotion } = useImmersion();
 
   const fillControls = useAnimationControls();
   const isHoldingRef = useRef(false);
@@ -41,6 +44,18 @@ export function HoldToAcceptButton({
     return () => clearTimers();
   }, []);
 
+  const completeAcceptance = () => {
+    isHoldingRef.current = false;
+    clearTimers();
+    setProgressPct(100);
+    setPhase('success');
+    soundEngine.playSuccess();
+
+    window.setTimeout(() => {
+      onAccept();
+    }, reducedMotion ? 120 : 380);
+  };
+
   const updatePercentageLoop = () => {
     if (!isHoldingRef.current) return;
     const elapsed = performance.now() - startTimeRef.current;
@@ -53,14 +68,20 @@ export function HoldToAcceptButton({
   };
 
   const handleHoldStart = () => {
-    if (disabled || phase === 'success') return;
+    if (disabled || phase === 'success' || isHoldingRef.current) return;
+
+    // Se preferência por movimento reduzido estiver ativa (RF-120), confirma de forma direta
+    if (reducedMotion) {
+      completeAcceptance();
+      return;
+    }
 
     isHoldingRef.current = true;
     startTimeRef.current = performance.now();
     setPhase('holding');
     setProgressPct(0);
+    soundEngine.playHoldCharge();
 
-    // Anima a barra de preenchimento contínuo por 2 segundos
     fillControls.start({
       scaleX: 1,
       transition: {
@@ -71,18 +92,9 @@ export function HoldToAcceptButton({
 
     rafRef.current = window.requestAnimationFrame(updatePercentageLoop);
 
-    // Dispara o sucesso exatamente ao completar os 2 segundos contínuos
-    timerRef.current = window.setTimeout(async () => {
+    timerRef.current = window.setTimeout(() => {
       if (!isHoldingRef.current) return;
-      isHoldingRef.current = false;
-      clearTimers();
-      setProgressPct(100);
-      setPhase('success');
-
-      // Breve janela para exibir o flash Ciano Neon de sucesso antes de remover o card
-      window.setTimeout(() => {
-        onAccept();
-      }, 420);
+      completeAcceptance();
     }, holdDurationMs);
   };
 
@@ -94,18 +106,32 @@ export function HoldToAcceptButton({
     setPhase('idle');
     setProgressPct(0);
 
-    // Esvazia a barra rapidamente se o usuário soltar antes dos 2s
     fillControls.stop();
     fillControls.start({
       scaleX: 0,
       transition: {
-        duration: 0.18,
+        duration: 0.16,
         ease: 'easeOut',
       },
     });
   };
 
-  // Paleta dinâmica conforme o estado e ameaça do contrato
+  // Suporte acessível por teclado (Espaço ou Enter - RNF-011)
+  const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    if (e.repeat) return;
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      handleHoldStart();
+    }
+  };
+
+  const handleKeyUp = (e: KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      handleHoldAbort();
+    }
+  };
+
   const baseColorClasses =
     phase === 'success'
       ? 'border-neon-cyan text-dark-bg shadow-hud-cyan'
@@ -117,33 +143,37 @@ export function HoldToAcceptButton({
     phase === 'success'
       ? 'bg-neon-cyan'
       : isPsycho
-      ? 'bg-neon-pink/35'
-      : 'bg-edgerunner-yellow/30';
+      ? 'bg-neon-pink/30'
+      : 'bg-edgerunner-yellow/25';
 
   return (
     <motion.button
       type="button"
       disabled={disabled || phase === 'success'}
-      onTapStart={handleHoldStart}
-      onTap={handleHoldAbort}
-      onTapCancel={handleHoldAbort}
-      whileTap={phase !== 'success' ? { scale: 0.97 } : undefined}
+      onPointerDown={handleHoldStart}
+      onPointerUp={handleHoldAbort}
+      onPointerLeave={handleHoldAbort}
+      onPointerCancel={handleHoldAbort}
+      onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
+      onBlur={handleHoldAbort}
+      aria-label={
+        reducedMotion
+          ? 'Aceitar contrato'
+          : 'Mantenha pressionado para confirmar aceitação do contrato'
+      }
+      whileTap={phase !== 'success' && !reducedMotion ? { scale: 0.98 } : undefined}
       animate={
         phase === 'success'
           ? {
-              backgroundColor: ['#00F0FF', '#050508', '#00F0FF'],
-              boxShadow: [
-                '0 0 0px rgba(0,240,255,0)',
-                '0 0 28px rgba(0,240,255,0.95)',
-                '0 0 18px rgba(0,240,255,0.75)',
-              ],
+              backgroundColor: ['#22D3EE', '#08090C', '#22D3EE'],
             }
           : undefined
       }
-      transition={{ duration: 0.38 }}
-      className={`relative overflow-hidden px-4 py-2.5 min-w-[165px] bg-dark-bg border font-mono text-xs font-bold uppercase tracking-widest select-none cursor-pointer disabled:cursor-not-allowed transition-colors ${baseColorClasses}`}
+      transition={{ duration: 0.32 }}
+      className={`relative overflow-hidden px-4 py-2.5 min-w-[178px] bg-dark-bg border font-mono text-xs font-bold uppercase tracking-widest select-none cursor-pointer disabled:cursor-not-allowed transition-colors ${baseColorClasses}`}
     >
-      {/* Barra de Preenchimento Progressivo (0 -> 100% em 2s) */}
+      {/* Barra de Preenchimento Progressivo */}
       <motion.span
         initial={{ scaleX: 0 }}
         animate={fillControls}
@@ -157,30 +187,30 @@ export function HoldToAcceptButton({
           initial={{ width: '0%' }}
           animate={{ width: '100%' }}
           transition={{ duration: holdDurationMs / 1000, ease: 'linear' }}
-          className="pointer-events-none absolute bottom-0 left-0 h-[2px] bg-neon-cyan shadow-[0_0_8px_#00F0FF]"
+          className="pointer-events-none absolute bottom-0 left-0 h-[2px] bg-neon-cyan shadow-[0_0_8px_#22D3EE]"
         />
       )}
 
-      {/* Conteúdo / Rótulo Tático */}
+      {/* Rótulo Operacional */}
       <span className="relative z-10 flex items-center justify-center gap-1.5">
         {phase === 'idle' && (
           <>
             <Zap className="w-3.5 h-3.5 shrink-0" />
-            <span>HOLD TO ACCEPT</span>
+            <span>{reducedMotion ? 'ACEITAR CONTRATO' : 'SEGURE P/ ACEITAR'}</span>
           </>
         )}
 
         {phase === 'holding' && (
           <>
             <Radio className="w-3.5 h-3.5 shrink-0 animate-spin text-neon-cyan" />
-            <span className="text-white">LINKING {progressPct}%</span>
+            <span className="text-white">VINCULANDO {progressPct}%</span>
           </>
         )}
 
         {phase === 'success' && (
           <>
             <CheckCircle2 className="w-4 h-4 shrink-0 text-dark-bg" />
-            <span className="text-dark-bg font-extrabold">GIG LINKED!</span>
+            <span className="text-dark-bg font-extrabold">VINCULADO</span>
           </>
         )}
       </span>

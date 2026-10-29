@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { HoldToAcceptButton } from '../ui/HoldToAcceptButton';
 import type { Contract, ThreatLevel } from '../../types/contract';
+import { soundEngine } from '../../utils/sound';
 
 interface ContractCardProps {
   contract: Contract;
@@ -29,32 +30,32 @@ const threatStyles: Record<
   }
 > = {
   LOW: {
-    cardBorder: 'border-dark-border hover:border-neon-green',
+    cardBorder: 'border-dark-border hover:border-neon-green/80',
     topBar: 'bg-neon-green',
-    badge: 'bg-neon-green/10 border-neon-green text-neon-green',
-    hoverGlow: 'hover:shadow-[0_0_20px_-4px_rgba(0,255,102,0.45)]',
-    label: 'THREAT // LOW',
+    badge: 'bg-neon-green/10 border-neon-green/60 text-neon-green',
+    hoverGlow: 'hover:shadow-hud-emerald',
+    label: 'RISCO // BAIXO',
   },
   MEDIUM: {
-    cardBorder: 'border-dark-border hover:border-neon-cyan',
+    cardBorder: 'border-dark-border hover:border-neon-cyan/80',
     topBar: 'bg-neon-cyan',
-    badge: 'bg-neon-cyan/10 border-neon-cyan text-neon-cyan',
+    badge: 'bg-neon-cyan/10 border-neon-cyan/60 text-neon-cyan',
     hoverGlow: 'hover:shadow-hud-cyan',
-    label: 'THREAT // MEDIUM',
+    label: 'RISCO // MÉDIO',
   },
   HIGH: {
-    cardBorder: 'border-edgerunner-yellow/40 hover:border-edgerunner-yellow',
+    cardBorder: 'border-edgerunner-yellow/35 hover:border-edgerunner-yellow',
     topBar: 'bg-edgerunner-yellow',
-    badge: 'bg-edgerunner-yellow/10 border-edgerunner-yellow text-edgerunner-yellow',
+    badge: 'bg-edgerunner-yellow/10 border-edgerunner-yellow/70 text-edgerunner-yellow',
     hoverGlow: 'hover:shadow-hud-yellow',
-    label: 'THREAT // HIGH',
+    label: 'RISCO // ALTO',
   },
   PSYCHO: {
-    cardBorder: 'border-neon-pink/80 hover:border-neon-pink',
+    cardBorder: 'border-neon-pink/60 hover:border-neon-pink',
     topBar: 'bg-neon-pink',
-    badge: 'bg-neon-pink/15 border-neon-pink text-neon-pink animate-pulse',
+    badge: 'bg-neon-pink/15 border-neon-pink text-neon-pink',
     hoverGlow: 'hover:shadow-hud-pink',
-    label: 'THREAT // PSYCHO',
+    label: 'RISCO // CRÍTICO',
   },
 };
 
@@ -69,25 +70,26 @@ export function ContractCard({
   const style = threatStyles[contract.threatLevel] || threatStyles.MEDIUM;
   const isPsycho = contract.threatLevel === 'PSYCHO';
 
-  const formattedReward = new Intl.NumberFormat('en-US', {
+  const formattedReward = new Intl.NumberFormat('pt-BR', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(contract.reward);
 
   return (
     <article
-      className={`group relative flex flex-col justify-between bg-dark-surface border-2 ${style.cardBorder} ${style.hoverGlow} cyber-chamfer transition-all duration-200 ease-out hover:-translate-y-1.5 overflow-hidden`}
+      onMouseEnter={() => soundEngine.playHover()}
+      className={`group relative flex flex-col justify-between bg-dark-surface border ${style.cardBorder} ${style.hoverGlow} cyber-chamfer ah-reticle transition-all duration-200 ease-out hover:-translate-y-1 overflow-hidden`}
     >
-      {/* Barra superior de nível de ameaça */}
+      {/* Indicador superior de classificação de risco */}
       <div className={`h-1 w-full ${style.topBar}`} />
 
       {/* Corpo do Card */}
       <div className="p-6 flex-1 flex flex-col justify-between space-y-5">
-        {/* Topo: ID + Threat Level Badge */}
+        {/* Topo: Identificador Único + Classificação de Risco */}
         <div>
           <div className="flex items-center justify-between gap-2 mb-3">
-            <span className="font-mono text-xs text-gray-500 tracking-widest uppercase">
-              GIG_ID #{String(contract.id).padStart(4, '0')}
+            <span className="font-mono text-xs text-gray-400 tracking-widest uppercase">
+              CTR #{String(contract.id).padStart(4, '0')}
             </span>
 
             <span
@@ -108,14 +110,14 @@ export function ContractCard({
           </h3>
         </div>
 
-        {/* Dados do Alvo e Facção */}
+        {/* Metadados Operacionais (Alvo e Organização/Facção) */}
         <div className="space-y-2.5 py-3.5 px-4 bg-dark-card/90 border border-dark-border">
           <div className="flex items-center justify-between font-mono text-xs">
             <span className="flex items-center gap-2 text-gray-400 uppercase">
               <Crosshair className="w-3.5 h-3.5 text-neon-pink" />
-              Target:
+              Alvo / Objetivo:
             </span>
-            <span className="text-white font-semibold tracking-wider uppercase truncate max-w-[60%]">
+            <span className="text-white font-semibold tracking-wider uppercase truncate max-w-[58%]">
               {contract.targetName}
             </span>
           </div>
@@ -123,29 +125,31 @@ export function ContractCard({
           <div className="flex items-center justify-between font-mono text-xs border-t border-dark-border/60 pt-2">
             <span className="flex items-center gap-2 text-gray-400 uppercase">
               <Building2 className="w-3.5 h-3.5 text-neon-cyan" />
-              Faction:
+              Organização:
             </span>
-            <span className="text-neon-cyan tracking-wider uppercase truncate max-w-[60%]">
+            <span className="text-neon-cyan tracking-wider uppercase truncate max-w-[58%]">
               {contract.faction}
             </span>
           </div>
         </div>
 
-        {/* Rodapé: Recompensa em Eddies + Ações Contextuais */}
+        {/* Rodapé: Recompensa em Créditos Fictícios + Ações */}
         <div className="pt-3 border-t border-dark-border flex flex-wrap items-end justify-between gap-4">
           <div>
             <span className="block font-mono text-[10px] text-gray-400 uppercase tracking-widest">
-              Bounty Reward
+              Recompensa Estimada
             </span>
-            <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="font-mono text-sm font-bold text-neon-green">€$</span>
-              <span className="font-mono text-2xl font-bold text-edgerunner-yellow drop-shadow-neon-yellow tracking-tight">
+            <div className="flex items-baseline gap-1.5 mt-0.5">
+              <span className="font-mono text-xs font-bold text-neon-green uppercase">
+                CR¢
+              </span>
+              <span className="font-mono text-2xl font-bold text-edgerunner-yellow tracking-tight">
                 {formattedReward}
               </span>
             </div>
           </div>
 
-          {/* 1. Ação no Market (AVAILABLE): Segurar por 2s para aceitar */}
+          {/* 1. Catálogo (AVAILABLE): Segurar para vincular operação */}
           {onAccept && contract.status === 'AVAILABLE' && (
             <HoldToAcceptButton
               onAccept={() => onAccept(contract.id)}
@@ -154,18 +158,21 @@ export function ContractCard({
             />
           )}
 
-          {/* 2. Ações em MyContracts (ACCEPTED): Botões COMPLETE e FAIL */}
+          {/* 2. Operações em Andamento (ACCEPTED): Concluir ou Reportar Falha */}
           {contract.status === 'ACCEPTED' && (onComplete || onFail) && (
             <div className="flex items-center gap-2">
               {onComplete && (
                 <button
                   type="button"
                   disabled={isProcessing}
-                  onClick={() => onComplete(contract.id)}
-                  className="px-3.5 py-2 bg-neon-green/10 border border-neon-green text-neon-green hover:bg-neon-green hover:text-dark-bg hover:shadow-[0_0_15px_rgba(0,255,102,0.5)] font-mono text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  onClick={() => {
+                    soundEngine.playClick();
+                    onComplete(contract.id);
+                  }}
+                  className="px-3.5 py-2 bg-neon-green/10 border border-neon-green text-neon-green hover:bg-neon-green hover:text-dark-bg hover:shadow-hud-emerald font-mono text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>COMPLETE</span>
+                  <span>CONCLUIR</span>
                 </button>
               )}
 
@@ -173,28 +180,31 @@ export function ContractCard({
                 <button
                   type="button"
                   disabled={isProcessing}
-                  onClick={() => onFail(contract.id)}
+                  onClick={() => {
+                    soundEngine.playClick();
+                    onFail(contract.id);
+                  }}
                   className="px-3.5 py-2 bg-neon-pink/10 border border-neon-pink text-neon-pink hover:bg-neon-pink hover:text-dark-bg hover:shadow-hud-pink font-mono text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <XCircle className="w-3.5 h-3.5" />
-                  <span>FAIL</span>
+                  <span>FALHAR</span>
                 </button>
               )}
             </div>
           )}
 
-          {/* 3. Badges de Status Finalizado (COMPLETED / FAILED) */}
+          {/* 3. Estados Finais Persistidos */}
           {contract.status === 'COMPLETED' && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neon-green/10 border border-neon-green font-mono text-xs font-bold text-neon-green uppercase tracking-widest">
               <CheckCircle2 className="w-4 h-4" />
-              COMPLETED
+              CONCLUÍDO
             </span>
           )}
 
           {contract.status === 'FAILED' && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neon-pink/10 border border-neon-pink font-mono text-xs font-bold text-neon-pink uppercase tracking-widest">
               <XCircle className="w-4 h-4" />
-              FAILED
+              FALHOU
             </span>
           )}
         </div>
