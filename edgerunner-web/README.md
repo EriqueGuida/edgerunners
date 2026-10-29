@@ -1,32 +1,32 @@
-# React + TypeScript + Vite
+# AFTERHOURS // Frontend Web (`edgerunner-web`)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Interface web da plataforma ficcional **AFTERHOURS**, desenvolvida como parte de um exercício prático de experimentação com o **Google Antigravity** para adiantar os estudos de **React** antes do módulo oficial no Curso Técnico em Desenvolvimento de Sistemas do **SENAI**.
 
-Currently, two official plugins are available:
+> Para a documentação completa do projeto, contexto acadêmico, instruções do backend Spring Boot e arquitetura geral, consulte o [README principal na raiz do repositório](../README.md).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Stack do Frontend
 
-## React Compiler
+- **React 19** + **TypeScript** + **Vite**
+- **React Router DOM** (Rotas públicas, autenticação e área operacional protegida)
+- **Tailwind CSS** (Design system *Nocturnal Operations Terminal*)
+- **Axios** (Comunicação com a API Spring Boot em `http://localhost:8080` e interceptores JWT)
+- **MapLibre GL JS** (Mapa mundial interativo com coordenadas WGS84)
+- **Framer Motion** & **Lucide React** (Animações e ícones)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Scripts Disponíveis
 
-## Expanding the Oxlint configuration
+Na pasta `edgerunner-web/`, execute:
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+```bash
+# Instalar dependências
+npm install
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+# Iniciar servidor de desenvolvimento (Vite HMR)
+npm run dev
+
+# Compilar para produção (TypeScript + Vite Build)
+npm run build
+
+# Executar verificação estática com Oxlint
+npm run lint
 ```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
