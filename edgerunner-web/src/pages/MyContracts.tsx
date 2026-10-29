@@ -58,12 +58,12 @@ interface SettlementCeremonyData {
 }
 
 export function MyContracts() {
-  const { operator, adjustLocalStats, refreshProfile } = useAuth();
+  const { operator, isDemoMode, adjustLocalStats, refreshProfile } = useAuth();
   const { reducedMotion } = useImmersion();
 
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isOfflineDemo, setIsOfflineDemo] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'ALL'>('ALL');
   const [feedback, setFeedback] = useState<FeedbackBanner | null>(null);
@@ -91,35 +91,51 @@ export function MyContracts() {
 
   const fetchMyContracts = useCallback(async () => {
     setIsLoading(true);
-    setIsOfflineDemo(false);
+    setLoadError(null);
+
+    if (isDemoMode) {
+      setContracts(getLocalMyContracts());
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const response = await api.get<Contract[]>('/api/contracts/my-contracts');
       setContracts(response.data);
       await refreshProfile();
     } catch {
-      setIsOfflineDemo(true);
-      setContracts(getLocalMyContracts());
+      setLoadError(
+        'Não foi possível sincronizar suas operações com o servidor.'
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [refreshProfile]);
+  }, [isDemoMode, refreshProfile]);
 
   useEffect(() => {
     let cancelled = false;
+    setIsLoading(true);
+    setLoadError(null);
+
+    if (isDemoMode) {
+      setContracts(getLocalMyContracts());
+      setIsLoading(false);
+      return;
+    }
+
     api
       .get<Contract[]>('/api/contracts/my-contracts')
       .then((res) => {
         if (!cancelled) {
           setContracts(res.data);
-          setIsOfflineDemo(false);
           setIsLoading(false);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setContracts(getLocalMyContracts());
-          setIsOfflineDemo(true);
+          setLoadError(
+            'Não foi possível sincronizar suas operações com o servidor.'
+          );
           setIsLoading(false);
         }
       });
@@ -127,7 +143,7 @@ export function MyContracts() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isDemoMode]);
 
   // Abre o Terminal de Submissão de Resultado quando o operador clica em CONCLUIR
   const openSubmissionTerminal = (id: number) => {
@@ -137,7 +153,7 @@ export function MyContracts() {
     setSelectedContract(null);
     setSubmissionTarget(target);
     setSubmissionHash(
-      `AH-SHA256-${String(target.id).padStart(4, '0')}-${Math.random()
+      `AH-TELEMETRY-${String(target.id).padStart(4, '0')}-${Math.random()
         .toString(36)
         .substring(2, 7)
         .toUpperCase()}`
@@ -156,7 +172,7 @@ export function MyContracts() {
     const id = submissionTarget.id;
     const cleanHash =
       submissionHash.trim() ||
-      `AH-VERIFIED-${String(id).padStart(4, '0')}`;
+      `AH-RECEIPT-${String(id).padStart(4, '0')}`;
     const cleanNotes = submissionNotes.trim();
     const repReward = submissionTarget.reputationReward ?? 10;
 
@@ -167,7 +183,7 @@ export function MyContracts() {
         status: 'COMPLETED',
       };
 
-      if (!isOfflineDemo) {
+      if (!isDemoMode) {
         const response = await api.post<Contract>(
           `/api/operations/${id}/submissions`,
           {
@@ -199,7 +215,7 @@ export function MyContracts() {
           `LIQUIDAÇÃO CONFIRMADA // CTR-${String(id).padStart(4, '0')}`,
           `Recompensa de ${new Intl.NumberFormat('pt-BR').format(
             submissionTarget.reward
-          )} ¢ e +${repReward} REP creditados (Hash: ${cleanHash}).`,
+          )} ¢ e +${repReward} REP creditados (Protocolo: ${cleanHash}).`,
           'SUCCESS'
         );
       }
@@ -214,12 +230,16 @@ export function MyContracts() {
         newReputation: reputation + repReward,
         submissionHash: cleanHash,
       });
-    } catch (err) {
-      console.error('Erro ao submeter conclusão:', err);
+    } catch (err: unknown) {
       soundEngine.playWarning();
+      const axiosErr = err as {
+        response?: { data?: { message?: string; error?: string } };
+      };
       triggerFeedback(
         'error',
-        'FALHA DE TRANSMISSÃO: Não foi possível validar o comprovante da operação.'
+        axiosErr.response?.data?.message ||
+          axiosErr.response?.data?.error ||
+          'FALHA DE TRANSMISSÃO: Não foi possível registrar o comprovante da operação no servidor.'
       );
     } finally {
       setProcessingId(null);
@@ -229,7 +249,7 @@ export function MyContracts() {
   const handleFailContract = async (id: number) => {
     setProcessingId(id);
     try {
-      if (!isOfflineDemo) {
+      if (!isDemoMode) {
         const response = await api.patch<Contract>(`/api/contracts/${id}/fail`);
         const updated = contracts.map((c) => (c.id === id ? response.data : c));
         setContracts(updated);
@@ -250,12 +270,16 @@ export function MyContracts() {
         'error',
         `OPERAÇÃO CTR-${String(id).padStart(4, '0')} ENCERRADA SEM SUCESSO // REGISTRO ARQUIVADO.`
       );
-    } catch (err) {
-      console.error('Erro ao marcar falha no contrato:', err);
+    } catch (err: unknown) {
       soundEngine.playWarning();
+      const axiosErr = err as {
+        response?: { data?: { message?: string; error?: string } };
+      };
       triggerFeedback(
         'error',
-        'FALHA DE TRANSMISSÃO: Não foi possível atualizar o estado da operação.'
+        axiosErr.response?.data?.message ||
+          axiosErr.response?.data?.error ||
+          'FALHA DE TRANSMISSÃO: Não foi possível atualizar o estado da operação no servidor.'
       );
     } finally {
       setProcessingId(null);
@@ -605,11 +629,30 @@ export function MyContracts() {
         </div>
       </div>
 
-      {isOfflineDemo && (
-        <div className="p-3.5 bg-[#111722] border border-[#1E2636] text-[#94A3B8] flex items-center gap-2.5 font-mono text-[11px]">
-          <AlertTriangle className="w-4 h-4 text-[#00E5FF] shrink-0" />
+      {loadError && (
+        <div
+          role="alert"
+          className="p-4 bg-[#F43F5E]/10 border border-[#F43F5E]/60 text-[#F43F5E] flex items-center justify-between gap-3 font-mono text-xs uppercase tracking-[0.14em]"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{loadError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchMyContracts}
+            className="underline hover:opacity-80 cursor-pointer"
+          >
+            TENTAR NOVAMENTE
+          </button>
+        </div>
+      )}
+
+      {isDemoMode && (
+        <div className="p-3.5 bg-[#F59E0B]/10 border border-[#F59E0B]/50 text-[#F59E0B] flex items-center gap-2.5 font-mono text-[11px]">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>
-            MODO TERMINAL LOCAL: Submissões realizadas aqui disparam a Cerimônia de Liquidação e gravam transações auditáveis na sua Carteira (/profile).
+            MODO DEMONSTRAÇÃO ATIVO: Submissões realizadas aqui disparam a Cerimônia de Liquidação simulada localmente sem persistência no servidor.
           </span>
         </div>
       )}
@@ -681,7 +724,7 @@ export function MyContracts() {
               <div className="flex items-center justify-between border-b border-[#1E2636] pb-4 mb-5">
                 <div>
                   <span className="font-mono text-[10px] text-[#00E5FF] uppercase tracking-[0.18em] block">
-                    CRYPTOGRAPHIC VERIFICATION // CTR-
+                    OPERATION COMPLETION PROTOCOL // CTR-
                     {String(submissionTarget.id).padStart(4, '0')}
                   </span>
                   <h2 className="font-display font-bold text-xl text-[#F1F5F9] mt-0.5">
@@ -703,7 +746,7 @@ export function MyContracts() {
                 </span>
                 <p className="font-sans text-xs text-[#F1F5F9]">
                   {submissionTarget.verificationPrompt ||
-                    'Informe o hash criptográfico ou código de telemetria obtido ao concluir os objetivos.'}
+                    'Informe o identificador de protocolo ou código de telemetria obtido ao concluir os objetivos.'}
                 </p>
               </div>
 
@@ -712,13 +755,13 @@ export function MyContracts() {
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="font-sans text-xs font-medium text-[#94A3B8] flex items-center gap-1.5">
                       <KeyRound className="w-3.5 h-3.5 text-[#00E5FF]" />
-                      Hash / Código de Evidência
+                      Identificador de Protocolo / Telemetria
                     </label>
                     <button
                       type="button"
                       onClick={() =>
                         setSubmissionHash(
-                          `AH-SHA256-${String(submissionTarget.id).padStart(
+                          `AH-TELEMETRY-${String(submissionTarget.id).padStart(
                             4,
                             '0'
                           )}-${Math.random()
@@ -729,7 +772,7 @@ export function MyContracts() {
                       }
                       className="font-mono text-[10px] text-[#00E5FF] hover:underline uppercase cursor-pointer"
                     >
-                      GERAR NOVO HASH
+                      GERAR CÓDIGO DE PROTOCOLO
                     </button>
                   </div>
                   <input
@@ -819,7 +862,7 @@ export function MyContracts() {
               </div>
 
               <span className="font-mono text-[11px] text-[#10B981] uppercase tracking-[0.22em] block">
-                SETTLEMENT VERIFIED // LIQUIDAÇÃO CONFIRMADA
+                SETTLEMENT RECORDED // LIQUIDAÇÃO REGISTRADA
               </span>
 
               <h2 className="font-display font-bold text-2xl md:text-3xl text-[#F1F5F9] mt-2">
@@ -827,7 +870,8 @@ export function MyContracts() {
               </h2>
 
               <p className="font-mono text-xs text-[#94A3B8] mt-1">
-                HASH AUDITADO: <span className="text-[#00E5FF]">{ceremonyData.submissionHash}</span>
+                IDENTIFICADOR DE PROTOCOLO:{' '}
+                <span className="text-[#00E5FF]">{ceremonyData.submissionHash}</span>
               </p>
 
               {/* Blocos de Transferência de Créditos e Evolução de Reputação */}

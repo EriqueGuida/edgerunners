@@ -19,8 +19,10 @@ import {
   Database,
   Globe2,
   Wallet,
+  AlertTriangle,
 } from 'lucide-react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import {
   fetchAllContractsUnified,
   createLocalContract,
@@ -62,10 +64,12 @@ const CITY_PRESETS = [
 ];
 
 export function Admin() {
+  const { isDemoMode } = useAuth();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [errorFeedback, setErrorFeedback] = useState<string | null>(null);
 
   // Campos do Formulário de Criação/Edição (RF-110, RF-111)
   const [title, setTitle] = useState('');
@@ -89,15 +93,24 @@ export function Admin() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchAllContractsUnified().then(({ contracts: list }) => {
-      if (!cancelled) {
-        setContracts(list);
-      }
-    });
+    setErrorFeedback(null);
+    fetchAllContractsUnified(isDemoMode)
+      .then(({ contracts: list }) => {
+        if (!cancelled) {
+          setContracts(list);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setErrorFeedback(
+            'Não foi possível sincronizar os contratos administrativos com o servidor.'
+          );
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isDemoMode]);
 
   // Inicializa o Mapa Seletor de Coordenadas (clique no mapa define latitude/longitude)
   useEffect(() => {
@@ -231,9 +244,17 @@ export function Admin() {
       objectives: objectives.trim() || undefined,
     };
 
+    setErrorFeedback(null);
     try {
       if (editingId !== null) {
-        try {
+        if (isDemoMode) {
+          const updated = updateLocalContract(editingId, payload);
+          if (updated) {
+            setContracts((prev) =>
+              prev.map((c) => (c.id === editingId ? updated : c))
+            );
+          }
+        } else {
           const res = await api.put<Contract>(
             `/api/admin/contracts/${editingId}`,
             payload
@@ -241,24 +262,17 @@ export function Admin() {
           setContracts((prev) =>
             prev.map((c) => (c.id === editingId ? res.data : c))
           );
-        } catch {
-          const updated = updateLocalContract(editingId, payload);
-          if (updated) {
-            setContracts((prev) =>
-              prev.map((c) => (c.id === editingId ? updated : c))
-            );
-          }
         }
         setFeedback(
           `CONTRATO CTR-${String(editingId).padStart(4, '0')} ATUALIZADO COM SUCESSO.`
         );
       } else {
-        try {
-          const res = await api.post<Contract>('/api/admin/contracts', payload);
-          setContracts((prev) => [res.data, ...prev]);
-        } catch {
+        if (isDemoMode) {
           const created = createLocalContract(payload);
           setContracts((prev) => [created, ...prev]);
+        } else {
+          const res = await api.post<Contract>('/api/admin/contracts', payload);
+          setContracts((prev) => [res.data, ...prev]);
         }
         setFeedback('NOVO CONTRATO GEOLOCALIZADO PUBLICADO NA REDE.');
       }
@@ -266,28 +280,52 @@ export function Admin() {
       soundEngine.playSuccess();
       resetForm();
       window.setTimeout(() => setFeedback(null), 4000);
-    } catch {
+    } catch (err: unknown) {
       soundEngine.playWarning();
+      const axiosErr = err as {
+        response?: { status?: number; data?: { message?: string; error?: string } };
+      };
+      setErrorFeedback(
+        axiosErr.response?.data?.message ||
+          axiosErr.response?.data?.error ||
+          'FALHA ADMINISTRATIVA: Não foi possível persistir a alteração no servidor.'
+      );
     }
   };
 
   const handleStatusChange = async (id: number, nextStatus: ContractStatus) => {
     soundEngine.playClick();
+    setErrorFeedback(null);
     try {
-      const res = await api.patch<Contract>(`/api/admin/contracts/${id}/status`, {
-        status: nextStatus,
-      });
-      setContracts((prev) => prev.map((c) => (c.id === id ? res.data : c)));
-    } catch {
-      const updated = updateLocalContractStatus(id, nextStatus);
-      if (updated) {
-        setContracts((prev) => prev.map((c) => (c.id === id ? updated : c)));
+      if (isDemoMode) {
+        const updated = updateLocalContractStatus(id, nextStatus);
+        if (updated) {
+          setContracts((prev) => prev.map((c) => (c.id === id ? updated : c)));
+        }
+      } else {
+        const res = await api.patch<Contract>(
+          `/api/admin/contracts/${id}/status`,
+          {
+            status: nextStatus,
+          }
+        );
+        setContracts((prev) => prev.map((c) => (c.id === id ? res.data : c)));
       }
+      setFeedback(
+        `STATUS DO CONTRATO CTR-${String(id).padStart(4, '0')} ALTERADO PARA ${nextStatus}.`
+      );
+      window.setTimeout(() => setFeedback(null), 3500);
+    } catch (err: unknown) {
+      soundEngine.playWarning();
+      const axiosErr = err as {
+        response?: { data?: { message?: string; error?: string } };
+      };
+      setErrorFeedback(
+        axiosErr.response?.data?.message ||
+          axiosErr.response?.data?.error ||
+          'Transição de status rejeitada pelo servidor.'
+      );
     }
-    setFeedback(
-      `STATUS DO CONTRATO CTR-${String(id).padStart(4, '0')} ALTERADO PARA ${nextStatus}.`
-    );
-    window.setTimeout(() => setFeedback(null), 3500);
   };
 
   const availableCount = contracts.filter((c) => c.status === 'AVAILABLE').length;
@@ -374,6 +412,25 @@ export function Admin() {
         <div className="p-4 bg-[#10B981]/10 border border-[#10B981]/60 text-[#10B981] font-mono text-xs uppercase tracking-[0.14em] flex items-center gap-2.5">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{feedback}</span>
+        </div>
+      )}
+
+      {errorFeedback && (
+        <div
+          role="alert"
+          className="p-4 bg-[#F43F5E]/10 border border-[#F43F5E]/60 text-[#F43F5E] font-mono text-xs uppercase tracking-[0.14em] flex items-center justify-between gap-2.5"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{errorFeedback}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorFeedback(null)}
+            className="underline text-[11px] cursor-pointer"
+          >
+            FECHAR
+          </button>
         </div>
       )}
 

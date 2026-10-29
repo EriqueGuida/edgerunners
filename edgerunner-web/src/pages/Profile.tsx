@@ -13,6 +13,7 @@ import {
   Terminal,
   Eye,
   Radio,
+  AlertTriangle,
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -39,7 +40,7 @@ const AVATAR_PRESETS = [
 ];
 
 export function Profile() {
-  const { operator, updateProfileLocal, refreshProfile } = useAuth();
+  const { operator, isDemoMode, updateProfileLocal, refreshProfile } = useAuth();
 
   const [callsign, setCallsign] = useState(
     () => operator?.callsign || operator?.username?.toUpperCase() || 'OP_VANGUARD'
@@ -58,14 +59,24 @@ export function Profile() {
 
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [reputationEvents, setReputationEvents] = useState<ReputationEvent[]>([]);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const balance = operator?.balance ?? operator?.eddies ?? 0;
   const reputation = operator?.reputation ?? operator?.streetCred ?? 1;
 
   useEffect(() => {
     let cancelled = false;
+    setLedgerError(null);
+
+    if (isDemoMode) {
+      setTransactions(getLocalWalletTransactions());
+      setReputationEvents(getLocalReputationEvents());
+      return;
+    }
+
     api
       .get<{
         balance: number;
@@ -75,34 +86,28 @@ export function Profile() {
       }>('/api/wallet')
       .then((res) => {
         if (!cancelled) {
-          setTransactions(
-            res.data.transactions?.length
-              ? res.data.transactions
-              : getLocalWalletTransactions()
-          );
-          setReputationEvents(
-            res.data.reputationEvents?.length
-              ? res.data.reputationEvents
-              : getLocalReputationEvents()
-          );
+          setTransactions(res.data.transactions || []);
+          setReputationEvents(res.data.reputationEvents || []);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setTransactions(getLocalWalletTransactions());
-          setReputationEvents(getLocalReputationEvents());
+          setLedgerError(
+            'Não foi possível carregar o histórico de movimentações a partir do servidor.'
+          );
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isDemoMode]);
 
   const handleSaveProfile = async (e: FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     setSaveSuccess(false);
+    setSaveError(null);
 
     const payload = {
       callsign: callsign.trim().toUpperCase() || 'OP_VANGUARD',
@@ -111,16 +116,28 @@ export function Profile() {
       avatarCode,
     };
 
-    try {
-      await api.patch('/api/operators/me', payload);
-      await refreshProfile();
-    } catch {
+    if (isDemoMode) {
       updateProfileLocal(payload);
-    } finally {
       soundEngine.playSuccess();
       setIsSaving(false);
       setSaveSuccess(true);
       window.setTimeout(() => setSaveSuccess(false), 3500);
+      return;
+    }
+
+    try {
+      await api.patch('/api/operators/me', payload);
+      await refreshProfile();
+      soundEngine.playSuccess();
+      setSaveSuccess(true);
+      window.setTimeout(() => setSaveSuccess(false), 3500);
+    } catch {
+      soundEngine.playWarning();
+      setSaveError(
+        'Não foi possível salvar as alterações de perfil no servidor.'
+      );
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -288,7 +305,24 @@ export function Profile() {
                   className="p-3 bg-[#10B981]/10 border border-[#10B981]/50 text-[#10B981] font-mono text-xs flex items-center gap-2"
                 >
                   <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>CREDENCIAL ATUALIZADA NA REDE AFTERHOURS.</span>
+                  <span>
+                    {isDemoMode
+                      ? 'IDENTIDADE SIMULADA ATUALIZADA NO TERMINAL LOCAL.'
+                      : 'CREDENCIAL ATUALIZADA NO SERVIDOR AFTERHOURS.'}
+                  </span>
+                </motion.div>
+              )}
+
+              {saveError && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  role="alert"
+                  className="p-3 bg-[#F43F5E]/10 border border-[#F43F5E]/60 text-[#F43F5E] font-mono text-xs flex items-center gap-2"
+                >
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{saveError}</span>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -324,7 +358,17 @@ export function Profile() {
             </div>
 
             <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
-              {transactions.map((tx) => (
+              {ledgerError ? (
+                <div className="p-4 bg-[#F43F5E]/10 border border-[#F43F5E]/50 text-[#F43F5E] font-mono text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{ledgerError}</span>
+                </div>
+              ) : transactions.length === 0 ? (
+                <p className="font-mono text-xs text-[#64748B] py-6 text-center">
+                  Nenhuma transação registrada na carteira até o momento.
+                </p>
+              ) : (
+                transactions.map((tx) => (
                 <div
                   key={tx.id}
                   className="p-4 bg-[#111722] border border-[#1E2636] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
@@ -362,7 +406,8 @@ export function Profile() {
                     </span>
                   </div>
                 </div>
-              ))}
+                ))
+              )}
             </div>
           </section>
 
@@ -384,7 +429,12 @@ export function Profile() {
             </div>
 
             <div className="space-y-3 max-h-[260px] overflow-y-auto pr-1">
-              {reputationEvents.map((ev) => (
+              {reputationEvents.length === 0 ? (
+                <p className="font-mono text-xs text-[#64748B] py-6 text-center">
+                  Nenhum evento de reputação registrado.
+                </p>
+              ) : (
+                reputationEvents.map((ev) => (
                 <div
                   key={ev.id}
                   className="p-3.5 bg-[#111722] border border-[#1E2636] flex items-center justify-between gap-4"
@@ -408,7 +458,8 @@ export function Profile() {
                     </span>
                   </div>
                 </div>
-              ))}
+                ))
+              )}
             </div>
           </section>
         </div>

@@ -148,6 +148,13 @@ public class AdminController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O novo status é obrigatório.");
         }
 
+        if (contract.getStatus() == ContractStatus.COMPLETED && request.getStatus() != ContractStatus.COMPLETED) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Contratos já liquidados (COMPLETED) possuem recompensas processadas e não podem ser reabertos."
+            );
+        }
+
         contract.setStatus(request.getStatus());
         if (request.getStatus() == ContractStatus.AVAILABLE) {
             contract.setHunter(null);

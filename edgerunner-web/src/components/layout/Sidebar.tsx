@@ -29,6 +29,7 @@ interface NavItem {
   path: string;
   code: string;
   icon: React.ComponentType<{ className?: string }>;
+  adminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -67,6 +68,7 @@ const navItems: NavItem[] = [
     path: '/admin',
     code: 'ADM_05',
     icon: ShieldAlert,
+    adminOnly: true,
   },
 ];
 
@@ -74,8 +76,10 @@ export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
-  const { operator, isAdmin, logout } = useAuth();
+  const { operator, isAdmin, isDemoMode, logout } = useAuth();
   const { visualMode, soundEnabled, toggleVisualMode, toggleSound } = useImmersion();
+
+  const visibleNavItems = navItems.filter((item) => !item.adminOnly || isAdmin);
 
   const operatorCallsign = operator?.callsign || operator?.username || 'OP_VANGUARD';
   const operatorBalance = operator?.balance ?? operator?.eddies ?? 0;
@@ -170,7 +174,11 @@ export function Sidebar() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-[10px] text-[#64748B] tracking-[0.16em] uppercase">
-                      {isAdmin ? 'CLEARANCE // ADMIN' : 'OPERADOR ATIVO'}
+                      {isDemoMode
+                        ? 'MODO DEMO // SIMULAÇÃO'
+                        : isAdmin
+                        ? 'CLEARANCE // ADMIN'
+                        : 'OPERADOR ATIVO'}
                     </span>
                     <span className="font-mono text-[10px] text-[#00E5FF] tracking-[0.12em] uppercase">
                       REP {operatorRep}
@@ -195,7 +203,7 @@ export function Sidebar() {
 
         {/* NAVEGAÇÃO OPERACIONAL */}
         <nav aria-label="Navegação Principal" className="flex-1 py-5 px-3 space-y-1.5">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
@@ -359,7 +367,7 @@ export function Sidebar() {
               <span className="text-[#94A3B8]">REP {operatorRep}</span>
             </div>
 
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               return (
                 <NavLink

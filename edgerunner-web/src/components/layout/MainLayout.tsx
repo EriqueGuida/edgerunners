@@ -9,12 +9,15 @@ import {
   Layers,
   Clock,
   Lock,
+  AlertTriangle,
 } from 'lucide-react';
 import { useImmersion } from '../../context/ImmersionContext';
+import { useAuth } from '../../context/AuthContext';
 
 export function MainLayout() {
   const location = useLocation();
   const currentOutlet = useOutlet();
+  const { isDemoMode } = useAuth();
   const {
     visualMode,
     soundEnabled,
@@ -117,10 +120,20 @@ export function MainLayout() {
 
             <span className="text-[#1E2636]">|</span>
 
-            <span className="flex items-center gap-1.5 text-[#10B981]">
-              <Lock className="w-3.5 h-3.5" />
-              TLS-1.3 // ATIVO
-            </span>
+            {isDemoMode ? (
+              <span
+                title="Sessão de demonstração local: ações não são persistidas em servidor"
+                className="flex items-center gap-1.5 text-[#F59E0B] px-2 py-0.5 bg-[#F59E0B]/10 border border-[#F59E0B]/50"
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                MODO DEMONSTRAÇÃO // SEM SERVIDOR
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-[#10B981]">
+                <Lock className="w-3.5 h-3.5" />
+                SESSÃO JWT // VERIFICADA
+              </span>
+            )}
           </div>
         </header>
 

@@ -107,12 +107,12 @@ public class AfterhoursDomainService {
         operation.setSubmissionHash(
                 submissionHash != null && !submissionHash.isBlank()
                         ? submissionHash.trim()
-                        : "AH-VERIFIED-" + savedContract.getId()
+                        : "AH-RECEIPT-" + String.format("%04d", savedContract.getId())
         );
         operation.setSubmissionNotes(
                 submissionNotes != null && !submissionNotes.isBlank()
                         ? submissionNotes.trim()
-                        : "Execução confirmada via terminal operacional AFTERHOURS."
+                        : "Relatório operacional registrado via terminal AFTERHOURS."
         );
         operation.setRewardPaid(reward);
         operation.setReputationEarned(repGain);
@@ -135,7 +135,7 @@ public class AfterhoursDomainService {
                 .operator(operator)
                 .delta(repGain)
                 .reputationAfter(newReputation)
-                .reason("Conclusão validada da operação: " + savedContract.getTitle())
+                .reason("Conclusão registrada da operação: " + savedContract.getTitle())
                 .createdAt(LocalDateTime.now())
                 .build());
 

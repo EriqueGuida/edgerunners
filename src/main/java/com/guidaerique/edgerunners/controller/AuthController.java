@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -119,9 +120,14 @@ public class AuthController {
         }
 
         String normalizedUsername = request.getUsername().trim();
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(normalizedUsername, request.getPassword())
-        );
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(normalizedUsername, request.getPassword())
+            );
+        } catch (AuthenticationException ex) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Credenciais operacionais inválidas."));
+        }
 
         Hunter hunter = hunterRepository.findByUsername(normalizedUsername).orElseThrow();
         String token = jwtService.generateToken(hunter.getUsername());

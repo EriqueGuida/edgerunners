@@ -77,12 +77,16 @@ interface MarketProps {
 
 export function Market({ defaultView }: MarketProps = {}) {
   const location = useLocation();
-  const { operator, refreshProfile } = useAuth();
+  const { operator, isAdmin, isDemoMode, refreshProfile } = useAuth();
   const operatorReputation = operator?.reputation ?? operator?.streetCred ?? 1;
 
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isOfflineDemo, setIsOfflineDemo] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionBanner, setActionBanner] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
   const [acceptingId, setAcceptingId] = useState<number | null>(null);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
 
@@ -120,27 +124,51 @@ export function Market({ defaultView }: MarketProps = {}) {
   const [newThreat, setNewThreat] = useState<ThreatLevel>('MEDIUM');
   const [newSummary, setNewSummary] = useState('');
 
+  const showBanner = (type: 'success' | 'error', message: string) => {
+    setActionBanner({ type, message });
+    window.setTimeout(() => {
+      setActionBanner((prev) => (prev?.message === message ? null : prev));
+    }, 5000);
+  };
+
   const loadContracts = useCallback(async () => {
     setIsLoading(true);
-    const { contracts: list, isOffline } = await fetchAllContractsUnified();
-    setContracts(list);
-    setIsOfflineDemo(isOffline);
-    setIsLoading(false);
-  }, []);
+    setLoadError(null);
+    try {
+      const { contracts: list } = await fetchAllContractsUnified(isDemoMode);
+      setContracts(list);
+    } catch {
+      setLoadError(
+        'Não foi possível comunicar com o servidor de operações para carregar o catálogo.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isDemoMode]);
 
   useEffect(() => {
     let cancelled = false;
-    fetchAllContractsUnified().then(({ contracts: list, isOffline }) => {
-      if (!cancelled) {
-        setContracts(list);
-        setIsOfflineDemo(isOffline);
-        setIsLoading(false);
-      }
-    });
+    setIsLoading(true);
+    setLoadError(null);
+    fetchAllContractsUnified(isDemoMode)
+      .then(({ contracts: list }) => {
+        if (!cancelled) {
+          setContracts(list);
+          setIsLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError(
+            'Não foi possível comunicar com o servidor de operações para carregar o catálogo.'
+          );
+          setIsLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isDemoMode]);
 
   const handleAcceptContract = async (idOrContract: number | Contract) => {
     const target =
@@ -151,7 +179,10 @@ export function Market({ defaultView }: MarketProps = {}) {
 
     setAcceptingId(target.id);
     try {
-      const { updatedContract, isOffline } = await acceptContractUnified(target);
+      const { updatedContract, isOffline } = await acceptContractUnified(
+        target,
+        isDemoMode
+      );
       setContracts((prev) =>
         prev.map((c) => (c.id === target.id ? updatedContract : c))
       );
@@ -161,9 +192,23 @@ export function Market({ defaultView }: MarketProps = {}) {
       if (!isOffline) {
         await refreshProfile();
       }
-    } catch (err) {
-      console.error('Erro ao aceitar contrato:', err);
+      soundEngine.playSuccess();
+      showBanner(
+        'success',
+        `OPERAÇÃO CTR-${String(target.id).padStart(4, '0')} VINCULADA AO SEU TERMINAL.`
+      );
+    } catch (err: unknown) {
       soundEngine.playWarning();
+      const axiosErr = err as {
+        response?: { status?: number; data?: { message?: string; error?: string } };
+      };
+      const serverMsg =
+        axiosErr.response?.data?.message || axiosErr.response?.data?.error;
+      showBanner(
+        'error',
+        serverMsg ||
+          'FALHA NA VINCULAÇÃO: O servidor rejeitou a operação ou está indisponível.'
+      );
     } finally {
       setAcceptingId(null);
     }
@@ -171,6 +216,15 @@ export function Market({ defaultView }: MarketProps = {}) {
 
   const handleCreateContract = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      soundEngine.playWarning();
+      showBanner(
+        'error',
+        'ACESSO NEGADO: Apenas contas com perfil ADMIN podem publicar contratos na rede.'
+      );
+      return;
+    }
+
     const parsedLat = newLatitude.trim() ? Number(newLatitude) : undefined;
     const parsedLng = newLongitude.trim() ? Number(newLongitude) : undefined;
 
@@ -195,7 +249,7 @@ export function Market({ defaultView }: MarketProps = {}) {
     };
 
     try {
-      if (!isOfflineDemo) {
+      if (!isDemoMode) {
         const response = await api.post<Contract>('/api/contracts', payload);
         setContracts((prev) => [response.data, ...prev]);
       } else {
@@ -203,6 +257,7 @@ export function Market({ defaultView }: MarketProps = {}) {
         setContracts((prev) => [created, ...prev]);
       }
       soundEngine.playSuccess();
+      showBanner('success', 'NOVO CONTRATO PUBLICADO NO DIRETÓRIO DA REDE.');
       setIsCreateModalOpen(false);
       setNewTitle('');
       setNewTarget('');
@@ -214,9 +269,20 @@ export function Market({ defaultView }: MarketProps = {}) {
       setNewMinRep('1');
       setNewSummary('');
       setNewThreat('MEDIUM');
-    } catch (err) {
-      console.error('Erro ao publicar contrato:', err);
+    } catch (err: unknown) {
       soundEngine.playWarning();
+      const axiosErr = err as { response?: { status?: number } };
+      if (axiosErr.response?.status === 403) {
+        showBanner(
+          'error',
+          'ACESSO NEGADO (HTTP 403): Permissão administrativa exigida para publicar contratos.'
+        );
+      } else {
+        showBanner(
+          'error',
+          'FALHA NA PUBLICAÇÃO: Não foi possível salvar o contrato no servidor.'
+        );
+      }
     }
   };
 
@@ -377,17 +443,19 @@ export function Market({ defaultView }: MarketProps = {}) {
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                soundEngine.playClick();
-                setIsCreateModalOpen(true);
-              }}
-              className="px-4 py-2.5 bg-[#00E5FF] hover:bg-[#33ECFF] text-[#07090E] font-mono text-[11px] font-semibold uppercase tracking-[0.16em] transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>PUBLICAR CONTRATO</span>
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playClick();
+                  setIsCreateModalOpen(true);
+                }}
+                className="px-4 py-2.5 bg-[#00E5FF] hover:bg-[#33ECFF] text-[#07090E] font-mono text-[11px] font-semibold uppercase tracking-[0.16em] transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>PUBLICAR CONTRATO</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -572,13 +640,64 @@ export function Market({ defaultView }: MarketProps = {}) {
         </div>
       </div>
 
-      {/* Aviso de contingência caso o backend não esteja ativo */}
-      {isOfflineDemo && (
-        <div className="p-3.5 bg-[#111722] border border-[#1E2636] text-[#94A3B8] flex items-center justify-between gap-3 font-mono text-[11px]">
+      {/* Banner de feedback operacional (sucesso ou falha de API) */}
+      {actionBanner && (
+        <div
+          role={actionBanner.type === 'error' ? 'alert' : 'status'}
+          className={`p-4 border font-mono text-xs uppercase tracking-[0.14em] flex items-center justify-between gap-3 ${
+            actionBanner.type === 'success'
+              ? 'bg-[#10B981]/10 border-[#10B981]/60 text-[#10B981]'
+              : 'bg-[#F43F5E]/10 border-[#F43F5E]/60 text-[#F43F5E]'
+          }`}
+        >
           <div className="flex items-center gap-2.5">
-            <AlertTriangle className="w-4 h-4 text-[#00E5FF] shrink-0" />
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{actionBanner.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionBanner(null)}
+            className="text-[11px] underline opacity-80 hover:opacity-100 cursor-pointer"
+          >
+            FECHAR
+          </button>
+        </div>
+      )}
+
+      {/* Erro explícito de comunicação com a API (sem mascarar com dados fictícios) */}
+      {loadError && (
+        <div
+          role="alert"
+          className="p-6 bg-[#F43F5E]/10 border border-[#F43F5E]/60 text-[#E6EDF3] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-[#F43F5E] shrink-0 mt-0.5" />
+            <div>
+              <h2 className="font-mono text-xs uppercase tracking-[0.16em] text-[#F43F5E] font-semibold">
+                ERRO DE COMUNICAÇÃO COM O BACKEND
+              </h2>
+              <p className="text-xs sm:text-sm text-[#94A3B8] mt-1">
+                {loadError}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={loadContracts}
+            className="px-4 py-2 bg-[#0C1017] border border-[#F43F5E]/60 hover:border-[#00E5FF] font-mono text-xs text-[#F1F5F9] uppercase tracking-[0.14em] shrink-0 cursor-pointer"
+          >
+            TENTAR NOVAMENTE
+          </button>
+        </div>
+      )}
+
+      {/* Aviso explícito quando em Modo Demonstração deliberado */}
+      {isDemoMode && (
+        <div className="p-3.5 bg-[#F59E0B]/10 border border-[#F59E0B]/50 text-[#F59E0B] flex items-center justify-between gap-3 font-mono text-[11px]">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>
-              MODO TERMINAL LOCAL: Catálogo geolocalizado em cache ativo. Alterne entre GRADE e MAPA GLOBAL ou clique em qualquer contrato para abrir o Dossiê de Briefing.
+              MODO DEMONSTRAÇÃO ATIVO: Catálogo simulado localmente. Operações realizadas neste modo não alteram o banco de dados do servidor.
             </span>
           </div>
         </div>

@@ -4,17 +4,21 @@ import com.guidaerique.edgerunners.model.*;
 import com.guidaerique.edgerunners.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 
 /**
- * Inicializador de dados que garante a existência de contas de demonstração (Operador e Administrador)
+ * Inicializador de dados que garante a existência de contas de demonstração para desenvolvimento local
  * e contratos geolocalizados ao redor da Terra para o catálogo e o mapa MapLibre GL JS.
+ * Nunca registra senhas ou segredos nos logs e bloqueia credenciais padrão em perfis restritos.
  */
 @Slf4j
 @Configuration
@@ -26,11 +30,31 @@ public class DataInitializer implements CommandLineRunner {
     private final NotificationRepository notificationRepository;
     private final ReputationEventRepository reputationEventRepository;
     private final PasswordEncoder passwordEncoder;
+    private final Environment environment;
+
+    @Value("${afterhours.seed.demo-accounts:true}")
+    private boolean seedDemoAccounts;
+
+    @Value("${afterhours.seed.admin-password:admin123}")
+    private String adminSeedPassword;
+
+    @Value("${afterhours.seed.operator-password:afterhours}")
+    private String operatorSeedPassword;
 
     @Override
     @Transactional
     public void run(String... args) {
-        seedDefaultAccounts();
+        boolean isStrictProfile = Arrays.stream(environment.getActiveProfiles())
+                .anyMatch(p -> p.equalsIgnoreCase("prod")
+                        || p.equalsIgnoreCase("production")
+                        || p.equalsIgnoreCase("staging")
+                        || p.equalsIgnoreCase("secure"));
+
+        if (seedDemoAccounts && !isStrictProfile) {
+            seedDefaultAccounts();
+        } else {
+            log.info("[AFTERHOURS] Semeadura de contas de demonstração desativada para este perfil de execução.");
+        }
         seedGeolocatedContracts();
     }
 
@@ -38,7 +62,7 @@ public class DataInitializer implements CommandLineRunner {
         if (!hunterRepository.existsByUsername("admin")) {
             Hunter admin = Hunter.builder()
                     .username("admin")
-                    .password(passwordEncoder.encode("admin123"))
+                    .password(passwordEncoder.encode(adminSeedPassword))
                     .role(Role.ADMIN)
                     .callsign("DIRECTOR_ZERO")
                     .specialization("DIREÇÃO DE OPERAÇÕES GLOBAIS")
@@ -49,13 +73,13 @@ public class DataInitializer implements CommandLineRunner {
                     .createdAt(LocalDateTime.now())
                     .build();
             hunterRepository.save(admin);
-            log.info("[AFTERHOURS] Conta administrativa inicializada (usuário: admin / senha: admin123)");
+            log.info("[AFTERHOURS] Conta administrativa de desenvolvimento inicializada (identificador: admin).");
         }
 
         if (!hunterRepository.existsByUsername("operador")) {
             Hunter operator = Hunter.builder()
                     .username("operador")
-                    .password(passwordEncoder.encode("afterhours"))
+                    .password(passwordEncoder.encode(operatorSeedPassword))
                     .role(Role.OPERATOR)
                     .callsign("OP_VANGUARD")
                     .specialization("INFILTRAÇÃO & EXTRAÇÃO DE DADOS")
@@ -83,7 +107,7 @@ public class DataInitializer implements CommandLineRunner {
                     .isRead(false)
                     .createdAt(LocalDateTime.now())
                     .build());
-            log.info("[AFTERHOURS] Conta de operador padrão inicializada (usuário: operador / senha: afterhours)");
+            log.info("[AFTERHOURS] Conta de operador de desenvolvimento inicializada (identificador: operador).");
         }
     }
 

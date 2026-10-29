@@ -42,7 +42,14 @@ export function App() {
                 <Route path="/operations" element={<MyContracts />} />
                 <Route path="/my-contracts" element={<MyContracts />} />
                 <Route path="/profile" element={<Profile />} />
-                <Route path="/admin" element={<Admin />} />
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute requireAdmin>
+                      <Admin />
+                    </ProtectedRoute>
+                  }
+                />
               </Route>
             </Route>
 

@@ -400,28 +400,25 @@ export function markAllLocalNotificationsRead(): NotificationItem[] {
   return updated;
 }
 
-export async function fetchAllContractsUnified(): Promise<{
+export async function fetchAllContractsUnified(isDemoMode = false): Promise<{
   contracts: Contract[];
   isOffline: boolean;
 }> {
-  try {
-    const response = await api.get<Contract[]>('/api/contracts');
-    return { contracts: response.data, isOffline: false };
-  } catch {
+  if (isDemoMode) {
     return { contracts: getLocalCatalogContracts(), isOffline: true };
   }
+  const response = await api.get<Contract[]>('/api/contracts');
+  return { contracts: response.data, isOffline: false };
 }
 
-export async function acceptContractUnified(contract: Contract): Promise<{
+export async function acceptContractUnified(
+  contract: Contract,
+  isDemoMode = false
+): Promise<{
   updatedContract: Contract;
   isOffline: boolean;
 }> {
-  try {
-    const response = await api.patch<Contract>(
-      `/api/contracts/${contract.id}/accept`
-    );
-    return { updatedContract: response.data, isOffline: false };
-  } catch {
+  if (isDemoMode) {
     const accepted: Contract = { ...contract, status: 'ACCEPTED' };
     const currentMy = getLocalMyContracts();
     const nextMy = [
@@ -438,6 +435,11 @@ export async function acceptContractUnified(contract: Contract): Promise<{
 
     return { updatedContract: accepted, isOffline: true };
   }
+
+  const response = await api.patch<Contract>(
+    `/api/contracts/${contract.id}/accept`
+  );
+  return { updatedContract: response.data, isOffline: false };
 }
 
 const REGION_DEFAULT_COORDS: Record<string, { lat: number; lng: number }> = {

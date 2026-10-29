@@ -11,11 +11,14 @@ import {
   EyeOff,
   Loader2,
   ArrowLeft,
+  WifiOff,
+  Terminal,
+  Activity,
 } from 'lucide-react';
 import api from '../services/api';
-import { authenticateInLocalVault } from '../services/localAuthVault';
 import { useAuth } from '../context/AuthContext';
 import { useImmersion } from '../context/ImmersionContext';
+import { soundEngine } from '../utils/sound';
 import gridFrankfurtImg from '../assets/afterhours-grid-frankfurt.jpg';
 import type { UserRole } from '../types/contract';
 
@@ -48,7 +51,7 @@ export function Login() {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { loginWithToken } = useAuth();
+  const { loginWithToken, enterDemoMode } = useAuth();
   const { reducedMotion } = useImmersion();
 
   const locationState = location.state as {
@@ -56,7 +59,14 @@ export function Login() {
     from?: { pathname?: string };
   } | null;
   const registeredMessage = locationState?.registered;
+  const sessionExpiredQuery = new URLSearchParams(location.search).get('expired') === '1';
   const redirectTarget = locationState?.from?.pathname || '/dashboard';
+
+  const handleEnterExplicitDemo = (role: UserRole) => {
+    soundEngine.playClick();
+    enterDemoMode(role);
+    navigate(redirectTarget, { replace: true });
+  };
 
   const validateFields = (): boolean => {
     const errors: FieldErrors = {};
@@ -64,7 +74,7 @@ export function Login() {
       errors.username = 'Informe seu identificador de operador.';
     }
     if (!password) {
-      errors.password = 'Informe sua senha de acesso.';
+      errors.password = 'Informe sua chave de acesso.';
     }
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -75,6 +85,7 @@ export function Login() {
     setAuthError(null);
 
     if (!validateFields()) {
+      soundEngine.playWarning();
       return;
     }
 
@@ -98,29 +109,20 @@ export function Login() {
         balance: data.balance ?? data.eddies ?? 0,
       });
 
+      soundEngine.playSuccess();
       navigate(redirectTarget, { replace: true });
     } catch (err: unknown) {
+      soundEngine.playWarning();
       const axiosErr = err as {
         response?: { status?: number; data?: { error?: string } };
       };
 
-      // Se o backend não estiver rodando localmente, verifica o Vault local criptografado (SHA-256)
+      // Se o backend não estiver acessível, reporta indisponibilidade de rede explicitamente (sem autenticar silenciosamente)
       if (!axiosErr.response) {
-        const vaultResult = await authenticateInLocalVault({
-          username: trimmedUsername,
-          password,
-        });
-
-        if (vaultResult) {
-          await loginWithToken(vaultResult.token, vaultResult.profile);
-          navigate(redirectTarget, { replace: true });
-          return;
-        }
-
         setAuthError({
-          kind: 'credentials',
+          kind: 'network',
           message:
-            'Unable to authenticate. Check your credentials and try again.',
+            'Servidor de operações inacessível (sem resposta HTTP em localhost:8080). Verifique se o backend Spring Boot está ativo ou acesse o modo de demonstração explicitamente.',
         });
         return;
       }
@@ -130,13 +132,14 @@ export function Login() {
         setAuthError({
           kind: 'credentials',
           message:
-            'Unable to authenticate. Check your credentials and try again.',
+            axiosErr.response.data?.error ||
+            'Credenciais rejeitadas pelo servidor. Verifique seu identificador e chave de acesso.',
         });
       } else {
         setAuthError({
           kind: 'server',
           message:
-            'The operations server returned an unexpected response. Please try again.',
+            'O servidor de operações retornou uma resposta inesperada. Tente novamente.',
         });
       }
     } finally {
@@ -206,9 +209,10 @@ export function Login() {
         <div className="relative z-10 flex items-center justify-between gap-4">
           <Link
             to="/"
-            className="font-display font-bold text-lg tracking-[0.18em] text-[#E6EDF3] hover:text-[#00E5FF] transition-colors"
+            className="font-display font-bold text-lg tracking-[0.18em] text-[#E6EDF3] hover:text-[#00E5FF] transition-colors flex items-center gap-2.5"
           >
-            AFTERHOURS
+            <span className="w-2 h-2 bg-[#00E5FF]" aria-hidden="true" />
+            <span>AFTERHOURS</span>
           </Link>
 
           <Link
@@ -216,11 +220,11 @@ export function Login() {
             className="font-mono text-xs text-[#8B98A9] hover:text-[#00E5FF] flex items-center gap-1.5 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Public Overview</span>
+            <span>VISÃO GERAL DA REDE</span>
           </Link>
         </div>
 
-        <div className="relative z-10 my-8 lg:my-0 max-w-xl space-y-5">
+        <div className="relative z-10 my-8 lg:my-0 max-w-xl space-y-6">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#0C1017]/90 border border-[#1E2636] font-mono text-[11px] text-[#00E5FF] tracking-[0.14em]">
             <span
               className="w-1.5 h-1.5 rounded-full bg-[#00E5FF]"
@@ -234,8 +238,37 @@ export function Login() {
           </h1>
 
           <p className="text-sm sm:text-base text-[#8B98A9] leading-relaxed max-w-md">
-            Acesso restrito a operadores credenciados. Estabeleça sessão autenticada para consultar contratos disponíveis, inspecionar briefings e submeter resultados de campo.
+            Acesso restrito a operadores credenciados. Estabeleça sessão autenticada para consultar contratos disponíveis, inspecionar briefings táticos e submeter relatórios de campo.
           </p>
+
+          {/* Painel de Telemetria do Gateway */}
+          <div className="hidden sm:grid grid-cols-3 gap-3 pt-2 max-w-lg">
+            <div className="p-3 bg-[#0C1017]/85 border border-[#1E2636]">
+              <span className="block font-mono text-[10px] text-[#8B98A9] uppercase tracking-[0.12em]">
+                PROTOCOLO DE SESSÃO
+              </span>
+              <span className="font-mono text-xs text-[#E6EDF3] font-semibold mt-1 block">
+                JWT // BEARER
+              </span>
+            </div>
+            <div className="p-3 bg-[#0C1017]/85 border border-[#1E2636]">
+              <span className="block font-mono text-[10px] text-[#8B98A9] uppercase tracking-[0.12em]">
+                CONTROLE DE ACESSO
+              </span>
+              <span className="font-mono text-xs text-[#00E5FF] font-semibold mt-1 block">
+                ROLE-BASED
+              </span>
+            </div>
+            <div className="p-3 bg-[#0C1017]/85 border border-[#1E2636]">
+              <span className="block font-mono text-[10px] text-[#8B98A9] uppercase tracking-[0.12em]">
+                ESTADO DO GATEWAY
+              </span>
+              <span className="font-mono text-xs text-[#10B981] font-semibold mt-1 flex items-center gap-1.5">
+                <Activity className="w-3 h-3" aria-hidden="true" />
+                <span>PRONTO</span>
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="hidden sm:flex relative z-10 pt-6 border-t border-[#1E2636]/80 items-center justify-between font-mono text-[11px] text-[#8B98A9]">
@@ -252,7 +285,7 @@ export function Login() {
           initial={reducedMotion ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="w-full max-w-md space-y-7"
+          className="w-full max-w-md space-y-7 bg-[#07090E]/55 border border-[#1E2636] p-6 sm:p-8 ah-corner-marks"
         >
           <div className="space-y-2 border-b border-[#1E2636] pb-5">
             <div className="flex items-center justify-between font-mono text-[11px] text-[#00E5FF] tracking-[0.14em]">
@@ -263,7 +296,7 @@ export function Login() {
               ACCESS TERMINAL
             </h2>
             <p className="text-sm text-[#8B98A9]">
-              Authenticate to continue to your operations environment.
+              Autentique suas credenciais para iniciar sessão no ambiente de operações.
             </p>
           </div>
 
@@ -278,10 +311,30 @@ export function Login() {
               />
               <div>
                 <p className="font-medium text-[#10B981]">
-                  Operator credential registered.
+                  Credencial de operador registrada com sucesso.
                 </p>
                 <p className="text-xs text-[#8B98A9] mt-0.5">
-                  Sign in below with your identifier and password to open the terminal.
+                  Informe seu identificador e chave de acesso abaixo para abrir o terminal.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {sessionExpiredQuery && !authError && (
+            <div
+              role="status"
+              className="p-3.5 bg-[#F59E0B]/10 border border-[#F59E0B]/60 text-[#E6EDF3] flex items-start gap-3 text-xs sm:text-sm"
+            >
+              <AlertTriangle
+                className="w-4 h-4 text-[#F59E0B] shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="font-medium text-[#F59E0B]">
+                  Sessão expirada ou encerrada pelo servidor.
+                </p>
+                <p className="text-xs text-[#8B98A9] mt-0.5">
+                  Autentique-se novamente para restabelecer o token JWT de operação.
                 </p>
               </div>
             </div>
@@ -291,33 +344,74 @@ export function Login() {
             <div
               role="alert"
               aria-live="assertive"
-              className="p-3.5 bg-[#F43F5E]/10 border border-[#F43F5E]/70 text-[#E6EDF3] flex items-start gap-3 text-xs sm:text-sm"
+              className="p-4 bg-[#F43F5E]/10 border border-[#F43F5E]/70 text-[#E6EDF3] space-y-3 text-xs sm:text-sm"
             >
-              <AlertTriangle
-                className="w-4 h-4 text-[#F43F5E] shrink-0 mt-0.5"
-                aria-hidden="true"
-              />
-              <div className="space-y-1">
-                <p className="font-medium text-[#F43F5E]">
-                  {authError.kind === 'network'
-                    ? 'Connection Error'
-                    : 'Authentication Failed'}
-                </p>
-                <p className="text-xs text-[#E6EDF3]/90 leading-relaxed">
-                  {authError.message}
-                </p>
+              <div className="flex items-start gap-3">
+                {authError.kind === 'network' ? (
+                  <WifiOff
+                    className="w-4 h-4 text-[#F43F5E] shrink-0 mt-0.5"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <AlertTriangle
+                    className="w-4 h-4 text-[#F43F5E] shrink-0 mt-0.5"
+                    aria-hidden="true"
+                  />
+                )}
+                <div className="space-y-1">
+                  <p className="font-mono text-xs uppercase tracking-wider font-semibold text-[#F43F5E]">
+                    {authError.kind === 'network'
+                      ? 'FALHA DE COMUNICAÇÃO // BACKEND INDISPONÍVEL'
+                      : authError.kind === 'server'
+                      ? 'ERRO DO SERVIDOR DE OPERAÇÕES'
+                      : 'AUTENTICAÇÃO REJEITADA'}
+                  </p>
+                  <p className="text-xs text-[#E6EDF3]/90 leading-relaxed">
+                    {authError.message}
+                  </p>
+                </div>
               </div>
+
+              {authError.kind === 'network' && (
+                <div className="pt-3 border-t border-[#F43F5E]/30 space-y-2">
+                  <span className="block font-mono text-[10px] text-[#8B98A9] uppercase tracking-[0.14em]">
+                    Contingência de Interface (Sem sessão JWT real):
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleEnterExplicitDemo('OPERATOR')}
+                      className="px-3 py-1.5 bg-[#07090E] border border-[#00E5FF]/60 hover:bg-[#00E5FF] text-[#00E5FF] hover:text-[#07090E] font-mono text-[10px] font-semibold uppercase tracking-[0.14em] flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Terminal className="w-3 h-3" />
+                      <span>ENTRAR EM DEMONSTRAÇÃO (OPERADOR)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleEnterExplicitDemo('ADMIN')}
+                      className="px-3 py-1.5 bg-[#07090E] border border-[#1E2636] hover:border-[#00E5FF] text-[#8B98A9] hover:text-[#E6EDF3] font-mono text-[10px] uppercase tracking-[0.14em] transition-colors cursor-pointer"
+                    >
+                      DEMO ADMIN
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           <form onSubmit={handleSubmit} noValidate className="space-y-5">
             <div>
-              <label
-                htmlFor="login-username"
-                className="block text-xs font-medium text-[#E6EDF3] mb-2"
-              >
-                Operator identifier
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label
+                  htmlFor="login-username"
+                  className="block text-xs font-medium text-[#E6EDF3]"
+                >
+                  Identificador do Operador
+                </label>
+                <span className="font-mono text-[10px] text-[#8B98A9] tracking-wider">
+                  OPERATOR_ID
+                </span>
+              </div>
               <div className="relative">
                 <User
                   className="w-4 h-4 text-[#8B98A9] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -341,7 +435,7 @@ export function Login() {
                       setFieldErrors((prev) => ({ ...prev, username: undefined }));
                     }
                   }}
-                  placeholder="Enter your operator handle"
+                  placeholder="Ex.: v_merc ou central"
                   className={`w-full pl-10 pr-4 py-3 bg-[#07090E] border text-sm text-[#E6EDF3] placeholder:text-[#8B98A9]/50 focus:outline-none transition-colors disabled:opacity-60 ${
                     fieldErrors.username
                       ? 'border-[#F43F5E] focus:border-[#F43F5E]'
@@ -364,12 +458,17 @@ export function Login() {
             </div>
 
             <div>
-              <label
-                htmlFor="login-password"
-                className="block text-xs font-medium text-[#E6EDF3] mb-2"
-              >
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label
+                  htmlFor="login-password"
+                  className="block text-xs font-medium text-[#E6EDF3]"
+                >
+                  Chave de Acesso
+                </label>
+                <span className="font-mono text-[10px] text-[#8B98A9] tracking-wider">
+                  ACCESS_KEY
+                </span>
+              </div>
               <div className="relative">
                 <Lock
                   className="w-4 h-4 text-[#8B98A9] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -405,7 +504,7 @@ export function Login() {
                   type="button"
                   disabled={isLoading}
                   onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-label={showPassword ? 'Ocultar chave de acesso' : 'Mostrar chave de acesso'}
                   aria-pressed={showPassword}
                   className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[#8B98A9] hover:text-[#E6EDF3] transition-colors cursor-pointer"
                 >
@@ -438,11 +537,11 @@ export function Login() {
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                  <span>AUTHENTICATING...</span>
+                  <span>AUTENTICANDO CREDENCIAL...</span>
                 </>
               ) : (
                 <>
-                  <span>AUTHENTICATE</span>
+                  <span>AUTHENTICATE // INICIAR SESSÃO</span>
                   <ArrowRight className="w-4 h-4" aria-hidden="true" />
                 </>
               )}
@@ -450,7 +549,7 @@ export function Login() {
           </form>
 
           <div className="pt-5 border-t border-[#1E2636] flex items-center justify-between text-xs text-[#8B98A9]">
-            <span>No active operator credential?</span>
+            <span>Não possui credencial ativa?</span>
             <Link
               to="/register"
               className="font-mono text-[#00E5FF] hover:underline tracking-wider flex items-center gap-1"

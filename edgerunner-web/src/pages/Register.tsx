@@ -13,8 +13,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import api from '../services/api';
-import { registerInLocalVault } from '../services/localAuthVault';
 import { useImmersion } from '../context/ImmersionContext';
+import { soundEngine } from '../utils/sound';
 import gridFrankfurtImg from '../assets/afterhours-grid-frankfurt.jpg';
 
 const SPECIALIZATIONS = [
@@ -75,30 +75,17 @@ export function Register() {
         response?: { status?: number; data?: { error?: string } };
       };
 
-      // Se o backend Spring Boot não estiver rodando (erro de conexão), registra com hash SHA-256 no Vault local
+      // Se o backend Spring Boot não estiver rodando (erro de conexão), informa claramente ao usuário sem simular registro local
       if (!axiosErr.response) {
-        try {
-          await registerInLocalVault({
-            username: trimmedUsername,
-            password,
-            callsign: resolvedCallsign,
-            specialization,
-          });
-          navigate('/login', { state: { registered: true } });
-          return;
-        } catch (vaultErr: unknown) {
-          const message =
-            vaultErr instanceof Error
-              ? vaultErr.message
-              : 'Este identificador já está registrado.';
-          setError(message);
-          return;
-        }
+        setError(
+          'Servidor de operações indisponível (offline). O registro de novas credenciais exige conexão ativa com o backend.'
+        );
+        return;
       }
 
       setError(
         axiosErr.response?.data?.error ||
-          'Unable to complete registration. Try another identifier.'
+          'Não foi possível concluir o registro. Verifique os dados informados.'
       );
     } finally {
       setIsLoading(false);
@@ -125,9 +112,10 @@ export function Register() {
         <div className="relative z-10 flex items-center justify-between gap-4">
           <Link
             to="/"
-            className="font-display font-bold text-lg tracking-[0.18em] text-[#E6EDF3] hover:text-[#00E5FF] transition-colors"
+            className="font-display font-bold text-lg tracking-[0.18em] text-[#E6EDF3] hover:text-[#00E5FF] transition-colors flex items-center gap-2.5"
           >
-            AFTERHOURS
+            <span className="w-2 h-2 bg-[#00E5FF]" aria-hidden="true" />
+            <span>AFTERHOURS</span>
           </Link>
 
           <Link
@@ -135,7 +123,7 @@ export function Register() {
             className="font-mono text-xs text-[#8B98A9] hover:text-[#00E5FF] flex items-center gap-1.5 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Public Overview</span>
+            <span>VISÃO GERAL DA REDE</span>
           </Link>
         </div>
 
@@ -169,7 +157,7 @@ export function Register() {
           initial={reducedMotion ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="w-full max-w-md space-y-6"
+          className="w-full max-w-md space-y-6 bg-[#07090E]/55 border border-[#1E2636] p-6 sm:p-8 ah-corner-marks"
         >
           <div className="space-y-2 border-b border-[#1E2636] pb-5">
             <div className="flex items-center justify-between font-mono text-[11px] text-[#00E5FF] tracking-[0.14em]">
@@ -180,7 +168,7 @@ export function Register() {
               REGISTER OPERATOR
             </h2>
             <p className="text-sm text-[#8B98A9]">
-              Create an operator account to access the AFTERHOURS network.
+              Emita uma nova credencial de operador na rede privada AFTERHOURS.
             </p>
           </div>
 
@@ -204,7 +192,7 @@ export function Register() {
                   htmlFor="reg-username"
                   className="block text-xs font-medium text-[#E6EDF3] mb-1.5"
                 >
-                  Operator identifier
+                  Identificador (Login)
                 </label>
                 <div className="relative">
                   <User
@@ -218,7 +206,7 @@ export function Register() {
                     disabled={isLoading}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="e.g. erique"
+                    placeholder="Ex.: erique"
                     className="w-full pl-9 pr-3 py-2.5 bg-[#07090E] border border-[#1E2636] text-sm text-[#E6EDF3] placeholder:text-[#8B98A9]/50 focus:outline-none focus:border-[#00E5FF]"
                   />
                 </div>
@@ -229,7 +217,7 @@ export function Register() {
                   htmlFor="reg-callsign"
                   className="block text-xs font-medium text-[#E6EDF3] mb-1.5"
                 >
-                  Public callsign (optional)
+                  Callsign Público (opcional)
                 </label>
                 <div className="relative">
                   <Shield
@@ -242,7 +230,7 @@ export function Register() {
                     disabled={isLoading}
                     value={callsign}
                     onChange={(e) => setCallsign(e.target.value)}
-                    placeholder="e.g. OP_ERIQUE"
+                    placeholder="Ex.: OP_ERIQUE"
                     className="w-full pl-9 pr-3 py-2.5 bg-[#07090E] border border-[#1E2636] text-sm text-[#E6EDF3] placeholder:text-[#8B98A9]/50 focus:outline-none focus:border-[#00E5FF]"
                   />
                 </div>
@@ -254,7 +242,7 @@ export function Register() {
                 htmlFor="reg-spec"
                 className="block text-xs font-medium text-[#E6EDF3] mb-1.5"
               >
-                Operational specialization
+                Especialização Operacional
               </label>
               <select
                 id="reg-spec"
@@ -277,7 +265,7 @@ export function Register() {
                   htmlFor="reg-password"
                   className="block text-xs font-medium text-[#E6EDF3] mb-1.5"
                 >
-                  Password
+                  Chave de Acesso
                 </label>
                 <div className="relative">
                   <Lock
@@ -297,7 +285,7 @@ export function Register() {
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? 'Ocultar chave de acesso' : 'Mostrar chave de acesso'}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8B98A9] hover:text-[#E6EDF3] cursor-pointer"
                   >
                     {showPassword ? (
@@ -314,7 +302,7 @@ export function Register() {
                   htmlFor="reg-confirm-password"
                   className="block text-xs font-medium text-[#E6EDF3] mb-1.5"
                 >
-                  Confirm password
+                  Confirmar Chave
                 </label>
                 <div className="relative">
                   <Lock
@@ -338,16 +326,17 @@ export function Register() {
             <button
               type="submit"
               disabled={isLoading}
+              onClick={() => soundEngine.playClick()}
               className="w-full py-3.5 px-6 mt-2 bg-[#00E5FF] text-[#07090E] hover:bg-[#00E5FF]/90 font-mono text-xs font-semibold tracking-[0.16em] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
             >
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                  <span>REGISTERING...</span>
+                  <span>REGISTRANDO CREDENCIAL...</span>
                 </>
               ) : (
                 <>
-                  <span>CREATE CREDENTIAL</span>
+                  <span>CREATE CREDENTIAL // EMITIR</span>
                   <ArrowRight className="w-4 h-4" aria-hidden="true" />
                 </>
               )}
@@ -355,7 +344,7 @@ export function Register() {
           </form>
 
           <div className="pt-5 border-t border-[#1E2636] flex items-center justify-between text-xs text-[#8B98A9]">
-            <span>Already hold an active credential?</span>
+            <span>Já possui credencial ativa?</span>
             <Link
               to="/login"
               className="font-mono text-[#00E5FF] hover:underline tracking-wider flex items-center gap-1"

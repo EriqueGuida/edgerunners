@@ -11,7 +11,7 @@ interface HoldToAcceptButtonProps {
   disabled?: boolean;
 }
 
-type ButtonPhase = 'idle' | 'holding' | 'success';
+type ButtonPhase = 'idle' | 'holding' | 'submitting';
 
 export function HoldToAcceptButton({
   onAccept,
@@ -44,23 +44,26 @@ export function HoldToAcceptButton({
     return () => clearTimers();
   }, []);
 
-  const completeAcceptance = () => {
+  const completeAcceptance = async () => {
     isHoldingRef.current = false;
     clearTimers();
     setProgressPct(100);
-    setPhase('success');
-    soundEngine.playSuccess();
+    setPhase('submitting');
 
-    window.setTimeout(() => {
-      onAccept();
-    }, reducedMotion ? 120 : 340);
+    try {
+      await Promise.resolve(onAccept());
+    } finally {
+      setPhase('idle');
+      setProgressPct(0);
+      fillControls.set({ scaleX: 0 });
+    }
   };
 
   const handleHoldStart = () => {
-    if (disabled || phase === 'success' || isHoldingRef.current) return;
+    if (disabled || phase === 'submitting' || isHoldingRef.current) return;
 
     if (reducedMotion) {
-      completeAcceptance();
+      void completeAcceptance();
       return;
     }
 
@@ -93,12 +96,12 @@ export function HoldToAcceptButton({
 
     timerRef.current = window.setTimeout(() => {
       if (!isHoldingRef.current) return;
-      completeAcceptance();
+      void completeAcceptance();
     }, holdDurationMs);
   };
 
   const handleHoldAbort = () => {
-    if (!isHoldingRef.current || phase === 'success') return;
+    if (!isHoldingRef.current || phase === 'submitting') return;
 
     isHoldingRef.current = false;
     clearTimers();
@@ -131,15 +134,15 @@ export function HoldToAcceptButton({
   };
 
   const baseColorClasses =
-    phase === 'success'
-      ? 'border-[#00E5FF] bg-[#00E5FF] text-[#07090E]'
+    phase === 'submitting'
+      ? 'border-[#00E5FF] bg-[#00E5FF]/20 text-[#00E5FF]'
       : isPsycho
       ? 'border-[#F43F5E]/70 bg-[#07090E] text-[#F43F5E] hover:border-[#F43F5E]'
       : 'border-[#00E5FF]/60 bg-[#07090E] text-[#00E5FF] hover:border-[#00E5FF]';
 
   const fillBarColor =
-    phase === 'success'
-      ? 'bg-[#00E5FF]'
+    phase === 'submitting'
+      ? 'bg-[#00E5FF]/25'
       : isPsycho
       ? 'bg-[#F43F5E]/20'
       : 'bg-[#00E5FF]/20';
@@ -147,7 +150,7 @@ export function HoldToAcceptButton({
   return (
     <motion.button
       type="button"
-      disabled={disabled || phase === 'success'}
+      disabled={disabled || phase === 'submitting'}
       onPointerDown={handleHoldStart}
       onPointerUp={handleHoldAbort}
       onPointerLeave={handleHoldAbort}
@@ -160,7 +163,7 @@ export function HoldToAcceptButton({
           ? 'Aceitar contrato'
           : 'Mantenha pressionado para confirmar aceitação do contrato'
       }
-      whileTap={phase !== 'success' && !reducedMotion ? { scale: 0.985 } : undefined}
+      whileTap={phase !== 'submitting' && !reducedMotion ? { scale: 0.985 } : undefined}
       className={`relative overflow-hidden px-4 py-2.5 min-w-[180px] border font-mono text-[11px] font-semibold uppercase tracking-[0.14em] select-none cursor-pointer disabled:cursor-not-allowed transition-colors ${baseColorClasses}`}
     >
       {/* Barra de Preenchimento Progressivo */}
@@ -197,10 +200,10 @@ export function HoldToAcceptButton({
           </>
         )}
 
-        {phase === 'success' && (
+        {phase === 'submitting' && (
           <>
-            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-[#07090E]" />
-            <span className="text-[#07090E] font-bold">VINCULADO</span>
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-[#00E5FF]" />
+            <span className="text-[#F1F5F9] font-bold">AGUARDANDO SERVIDOR...</span>
           </>
         )}
       </span>

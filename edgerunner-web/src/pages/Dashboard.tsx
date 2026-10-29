@@ -32,11 +32,13 @@ import type { Contract, NotificationItem } from '../types/contract';
 import { soundEngine } from '../utils/sound';
 
 export function Dashboard() {
-  const { operator, refreshProfile } = useAuth();
+  const { operator, isDemoMode, refreshProfile } = useAuth();
   const [allContracts, setAllContracts] = useState<Contract[]>([]);
   const [myContracts, setMyContracts] = useState<Contract[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<number | null>(null);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
@@ -51,33 +53,41 @@ export function Dashboard() {
 
     async function loadDashboardData() {
       setIsLoading(true);
-      const { contracts, isOffline } = await fetchAllContractsUnified();
+      setLoadError(null);
 
-      let operatorContracts: Contract[] = [];
-      let operatorNotifications: NotificationItem[] = [];
-
-      if (!isOffline) {
-        try {
-          const [myRes, notifRes] = await Promise.all([
-            api.get<Contract[]>('/api/contracts/my-contracts'),
-            api.get<NotificationItem[]>('/api/notifications'),
-          ]);
-          operatorContracts = myRes.data;
-          operatorNotifications = notifRes.data;
-        } catch {
-          operatorContracts = getLocalMyContracts();
-          operatorNotifications = getLocalNotifications();
+      if (isDemoMode) {
+        const { contracts } = await fetchAllContractsUnified(true);
+        if (!cancelled) {
+          setAllContracts(contracts);
+          setMyContracts(getLocalMyContracts());
+          setNotifications(getLocalNotifications());
+          setIsLoading(false);
         }
-      } else {
-        operatorContracts = getLocalMyContracts();
-        operatorNotifications = getLocalNotifications();
+        return;
       }
 
-      if (!cancelled) {
-        setAllContracts(contracts);
-        setMyContracts(operatorContracts);
-        setNotifications(operatorNotifications);
-        setIsLoading(false);
+      try {
+        const [{ contracts }, myRes, notifRes] = await Promise.all([
+          fetchAllContractsUnified(false),
+          api.get<Contract[]>('/api/contracts/my-contracts'),
+          api.get<NotificationItem[]>('/api/notifications'),
+        ]);
+
+        if (!cancelled) {
+          setAllContracts(contracts);
+          setMyContracts(myRes.data);
+          setNotifications(notifRes.data);
+        }
+      } catch {
+        if (!cancelled) {
+          setLoadError(
+            'Falha de comunicação com o servidor ao sincronizar os dados do terminal.'
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
@@ -85,7 +95,7 @@ export function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isDemoMode]);
 
   const handleAcceptContract = async (idOrContract: number | Contract) => {
     const target =
@@ -95,8 +105,12 @@ export function Dashboard() {
     if (!target) return;
 
     setAcceptingId(target.id);
+    setErrorBanner(null);
     try {
-      const { updatedContract, isOffline } = await acceptContractUnified(target);
+      const { updatedContract, isOffline } = await acceptContractUnified(
+        target,
+        isDemoMode
+      );
       setAllContracts((prev) =>
         prev.map((c) => (c.id === target.id ? updatedContract : c))
       );
@@ -113,6 +127,7 @@ export function Dashboard() {
         setNotifications(getLocalNotifications());
       }
 
+      soundEngine.playSuccess();
       setSelectedContract((prev) =>
         prev?.id === target.id ? updatedContract : prev
       );
@@ -120,8 +135,16 @@ export function Dashboard() {
         `OPERAÇÃO CTR-${String(target.id).padStart(4, '0')} VINCULADA AO SEU TERMINAL.`
       );
       window.setTimeout(() => setBannerMessage(null), 4000);
-    } catch {
+    } catch (err: unknown) {
       soundEngine.playWarning();
+      const axiosErr = err as {
+        response?: { data?: { message?: string; error?: string } };
+      };
+      setErrorBanner(
+        axiosErr.response?.data?.message ||
+          axiosErr.response?.data?.error ||
+          'FALHA NA VINCULAÇÃO: O servidor rejeitou a operação ou está inacessível.'
+      );
     } finally {
       setAcceptingId(null);
     }
@@ -129,11 +152,18 @@ export function Dashboard() {
 
   const handleMarkAllRead = async () => {
     soundEngine.playClick();
+    if (isDemoMode) {
+      setNotifications(markAllLocalNotificationsRead());
+      return;
+    }
     try {
       await api.patch('/api/notifications/read-all');
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
     } catch {
-      setNotifications(markAllLocalNotificationsRead());
+      soundEngine.playWarning();
+      setErrorBanner(
+        'Não foi possível sincronizar o estado das notificações com o servidor.'
+      );
     }
   };
 
@@ -241,6 +271,30 @@ export function Dashboard() {
             >
               IR PARA OPERAÇÕES &rarr;
             </Link>
+          </motion.div>
+        )}
+
+        {(loadError || errorBanner) && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            role="alert"
+            className="p-4 bg-[#F43F5E]/10 border border-[#F43F5E]/60 text-[#F43F5E] font-mono text-xs uppercase tracking-[0.14em] flex items-center justify-between gap-4"
+          >
+            <span className="flex items-center gap-2.5">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              {errorBanner || loadError}
+            </span>
+            {errorBanner && (
+              <button
+                type="button"
+                onClick={() => setErrorBanner(null)}
+                className="underline hover:opacity-80 text-[11px] cursor-pointer"
+              >
+                FECHAR
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

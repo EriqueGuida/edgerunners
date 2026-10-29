@@ -6,18 +6,30 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
-import api, { TOKEN_KEY, USER_KEY } from '../services/api';
+import api, {
+  TOKEN_KEY,
+  USER_KEY,
+  SESSION_MODE_KEY,
+  PROFILE_CACHE_KEY,
+} from '../services/api';
+import { createDemoSession } from '../services/localAuthVault';
 import type { OperatorProfile, UserRole } from '../types/contract';
 
-const PROFILE_CACHE_KEY = 'afterhours_profile_cache';
+export type SessionMode = 'BACKEND' | 'DEMO' | null;
 
 interface AuthContextValue {
   token: string | null;
   operator: OperatorProfile | null;
+  sessionMode: SessionMode;
   isAuthenticated: boolean;
+  isDemoMode: boolean;
   isAdmin: boolean;
   isLoading: boolean;
-  loginWithToken: (token: string, initialData?: Partial<OperatorProfile>) => Promise<void>;
+  loginWithToken: (
+    token: string,
+    initialData?: Partial<OperatorProfile>
+  ) => Promise<void>;
+  enterDemoMode: (role?: UserRole) => void;
   logout: () => void;
   refreshProfile: () => Promise<void>;
   adjustLocalStats: (rewardDelta: number, reputationDelta: number) => void;
@@ -26,7 +38,10 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const createBaseProfile = (username: string, role: UserRole = 'OPERATOR'): OperatorProfile => ({
+const createBaseProfile = (
+  username: string,
+  role: UserRole = 'OPERATOR'
+): OperatorProfile => ({
   id: 0,
   username,
   callsign: `OP_${username.toUpperCase().replace(/^OP_/, '')}`,
@@ -44,9 +59,39 @@ const createBaseProfile = (username: string, role: UserRole = 'OPERATOR'): Opera
   unreadNotificationsCount: 0,
 });
 
+function isLocalOrDemoToken(token: string | null): boolean {
+  if (!token) return false;
+  return token.startsWith('ah_demo_') || token.startsWith('ah_local_jwt_');
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+  const [token, setToken] = useState<string | null>(() => {
+    const stored = localStorage.getItem(TOKEN_KEY);
+    // Rejeita tokens legados de cofre SHA-256 local que simulavam JWTs reais
+    if (stored && stored.startsWith('ah_local_jwt_')) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      localStorage.removeItem(PROFILE_CACHE_KEY);
+      localStorage.removeItem(SESSION_MODE_KEY);
+      return null;
+    }
+    return stored;
+  });
+
+  const [sessionMode, setSessionMode] = useState<SessionMode>(() => {
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    if (!storedToken || storedToken.startsWith('ah_local_jwt_')) return null;
+    const savedMode = localStorage.getItem(SESSION_MODE_KEY);
+    if (savedMode === 'DEMO' || storedToken.startsWith('ah_demo_')) {
+      return 'DEMO';
+    }
+    return 'BACKEND';
+  });
+
   const [operator, setOperator] = useState<OperatorProfile | null>(() => {
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    if (!storedToken || storedToken.startsWith('ah_local_jwt_')) return null;
+
     const cached = localStorage.getItem(PROFILE_CACHE_KEY);
     if (cached) {
       try {
@@ -58,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const savedUser = localStorage.getItem(USER_KEY);
     return savedUser ? createBaseProfile(savedUser) : null;
   });
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const persistOperator = (profile: OperatorProfile | null) => {
@@ -70,14 +116,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(PROFILE_CACHE_KEY);
+    localStorage.removeItem(SESSION_MODE_KEY);
+    setToken(null);
+    setSessionMode(null);
+    setOperator(null);
+  }, []);
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      logout();
+    };
+    window.addEventListener('afterhours:session-expired', handleSessionExpired);
+    return () =>
+      window.removeEventListener(
+        'afterhours:session-expired',
+        handleSessionExpired
+      );
+  }, [logout]);
+
   const refreshProfile = useCallback(async () => {
     const activeToken = localStorage.getItem(TOKEN_KEY);
+    const activeMode = localStorage.getItem(SESSION_MODE_KEY);
     if (!activeToken) {
       persistOperator(null);
       return;
     }
 
-    if (activeToken.startsWith('ah_local_jwt_')) {
+    if (activeMode === 'DEMO' || isLocalOrDemoToken(activeToken)) {
       return;
     }
 
@@ -85,15 +154,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await api.get<OperatorProfile>('/api/operators/me');
       persistOperator(response.data);
-    } catch {
-      // Preserva metadados básicos já obtidos no login
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 401) {
+        logout();
+      }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [logout]);
 
   useEffect(() => {
-    if (!token || token.startsWith('ah_local_jwt_')) return;
+    if (!token || sessionMode === 'DEMO' || isLocalOrDemoToken(token)) return;
     let cancelled = false;
     api
       .get<OperatorProfile>('/api/operators/me')
@@ -102,31 +174,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           persistOperator(response.data);
         }
       })
-      .catch(() => {
-        // Preserva metadados básicos já obtidos no login caso o servidor esteja offline
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 401) {
+          logout();
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, sessionMode, logout]);
 
   const loginWithToken = async (
     newToken: string,
     initialData?: Partial<OperatorProfile>
   ) => {
-    localStorage.setItem(TOKEN_KEY, newToken);
-    setToken(newToken);
+    if (isLocalOrDemoToken(newToken)) {
+      throw new Error('Tokens locais de demonstração não podem ser usados em loginWithToken.');
+    }
 
-    const username = initialData?.username || localStorage.getItem(USER_KEY) || 'operator';
+    localStorage.setItem(TOKEN_KEY, newToken);
+    localStorage.setItem(SESSION_MODE_KEY, 'BACKEND');
+    setToken(newToken);
+    setSessionMode('BACKEND');
+
+    const username =
+      initialData?.username || localStorage.getItem(USER_KEY) || 'operator';
     const baseProfile: OperatorProfile = {
       ...createBaseProfile(username, initialData?.role || 'OPERATOR'),
       ...initialData,
     };
     persistOperator(baseProfile);
-
-    if (newToken.startsWith('ah_local_jwt_')) {
-      return;
-    }
 
     try {
       const response = await api.get<OperatorProfile>('/api/operators/me');
@@ -136,18 +215,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    localStorage.removeItem(PROFILE_CACHE_KEY);
-    setToken(null);
-    setOperator(null);
+  const enterDemoMode = (role: UserRole = 'OPERATOR') => {
+    const demo = createDemoSession(role);
+    localStorage.setItem(TOKEN_KEY, demo.token);
+    localStorage.setItem(SESSION_MODE_KEY, 'DEMO');
+    setToken(demo.token);
+    setSessionMode('DEMO');
+    persistOperator(demo.profile);
   };
 
   const adjustLocalStats = (rewardDelta: number, reputationDelta: number) => {
     if (!operator) return;
     const newBalance = (operator.balance ?? operator.eddies ?? 0) + rewardDelta;
-    const newRep = (operator.reputation ?? operator.streetCred ?? 1) + reputationDelta;
+    const newRep =
+      (operator.reputation ?? operator.streetCred ?? 1) + reputationDelta;
     const updated: OperatorProfile = {
       ...operator,
       balance: newBalance,
@@ -167,15 +248,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistOperator(updated);
   };
 
+  const isDemoMode = sessionMode === 'DEMO' || isLocalOrDemoToken(token);
+  const isAuthenticated = Boolean(token) && sessionMode === 'BACKEND' && !isDemoMode;
+
   return (
     <AuthContext.Provider
       value={{
         token,
         operator,
-        isAuthenticated: Boolean(token),
+        sessionMode,
+        isAuthenticated,
+        isDemoMode,
         isAdmin: operator?.role === 'ADMIN',
         isLoading,
         loginWithToken,
+        enterDemoMode,
         logout,
         refreshProfile,
         adjustLocalStats,
